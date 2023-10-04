@@ -10,6 +10,8 @@ const NEGATIVE_FLAG: u8 = 1 << 7;
 
 // const BRK_VECTOR: u16 = 0xfffe;
 
+const STACK_RESET: u8 = 0xfd;
+
 pub struct CPU {
     pub register_a: u8,
     pub register_x: u8,
@@ -22,7 +24,7 @@ pub struct CPU {
 
 #[derive(Debug)]
 pub enum AddressingMode {
-    Acumulator,
+    Accumulator,
     Immediate,
     ZeroPage,
     ZeroPageX,
@@ -30,12 +32,13 @@ pub enum AddressingMode {
     Absolute,
     AbsoluteX,
     AbsoluteY,
+    Indirect,
     IndirectX,
     IndirectY,
     NoneAddressing,
 }
 
-trait Mem {
+pub trait Mem {
     fn mem_read(&self, addr: u16) -> u8;
 
     fn mem_write(&mut self, addr: u16, data: u8);
@@ -107,22 +110,19 @@ impl CPU {
                 addr
             }
 
+            AddressingMode::Indirect => {
+                let base = self.mem_read_u16(self.program_counter);
+                self.mem_read_u16(base)
+            }
             AddressingMode::IndirectX => {
                 let base = self.mem_read(self.program_counter);
-
-                let ptr: u8 = (base as u8).wrapping_add(self.register_x);
-                let lo = self.mem_read(ptr as u16);
-                let hi = self.mem_read(ptr.wrapping_add(1) as u16);
-                (hi as u16) << 8 | (lo as u16)
+                let ptr = (base as u8).wrapping_add(self.register_x) & 0xFF;
+                self.mem_read_u16(ptr as u16)
             }
             AddressingMode::IndirectY => {
                 let base = self.mem_read(self.program_counter);
-
-                let lo = self.mem_read(base as u16);
-                let hi = self.mem_read((base as u8).wrapping_add(1) as u16);
-                let deref_base = (hi as u16) << 8 | (lo as u16);
-                let deref = deref_base.wrapping_add(self.register_y as u16);
-                deref
+                let ptr = self.mem_read_u16(base as u16);
+                ptr.wrapping_add(self.register_y as u16)
             }
 
             _ => {
@@ -188,7 +188,7 @@ impl CPU {
 
     fn asl(&mut self, mode: &AddressingMode) {
         match mode {
-            AddressingMode::Acumulator => {
+            AddressingMode::Accumulator => {
                 self.set_flag(CARRY_FLAG, (self.register_a & 0x80) == 1);
 
                 self.register_a <<= 1;
@@ -210,7 +210,12 @@ impl CPU {
 
     fn branch(&mut self) {
         let offset = self.mem_read(self.program_counter) as i8;
-        self.program_counter = self.program_counter.wrapping_add(offset as u16);
+        let jump_addr = self
+            .program_counter
+            .wrapping_add(1)
+            .wrapping_add(offset as u16);
+
+        self.program_counter = jump_addr;
     }
 
     fn bcc(&mut self) {
@@ -271,12 +276,12 @@ impl CPU {
     }
 
     // fn brk(&mut self) {
-    // self.push_stack16(self.program_counter);
-    // self.push_stack(self.stack_pointer);
+    //     self.push_stack16(self.program_counter);
+    //     self.push_stack(self.stack_pointer);
 
-    // self.program_counter = self.mem_read_u16(BRK_VECTOR);
+    //     self.program_counter = self.mem_read_u16(BRK_VECTOR);
 
-    // self.set_flag(BREAK_FLAG, true);
+    //     self.set_flag(BREAK_FLAG, true);
     // }
 
     fn clc(&mut self) {
@@ -298,7 +303,7 @@ impl CPU {
     fn cmp_register(&mut self, reg: u8, mode: &AddressingMode) {
         let addr = self.get_operand_address(&mode);
         let value = self.mem_read(addr);
-        let result = reg - value;
+        let result = reg.wrapping_sub(value);
 
         self.set_flag(CARRY_FLAG, reg >= value);
         self.set_flag(ZERO_FLAG, reg == value);
@@ -375,7 +380,7 @@ impl CPU {
 
     fn jsr(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(&mode);
-        self.push_stack16(self.program_counter.wrapping_add(2));
+        self.push_stack16(self.program_counter + 2 - 1);
 
         self.program_counter = addr;
     }
@@ -409,7 +414,7 @@ impl CPU {
 
     fn lsr(&mut self, mode: &AddressingMode) {
         match mode {
-            AddressingMode::Acumulator => {
+            AddressingMode::Accumulator => {
                 self.set_flag(CARRY_FLAG, (self.register_a & 1) == 1);
 
                 self.register_a >>= 1;
@@ -463,7 +468,7 @@ impl CPU {
 
     fn rol(&mut self, mode: &AddressingMode) {
         match mode {
-            AddressingMode::Acumulator => {
+            AddressingMode::Accumulator => {
                 let current_carry_flag = self.get_flag(CARRY_FLAG) as u8;
                 let new_carry_flag = ((self.register_a >> 7) & 1) == 1;
 
@@ -491,7 +496,7 @@ impl CPU {
 
     fn ror(&mut self, mode: &AddressingMode) {
         match mode {
-            AddressingMode::Acumulator => {
+            AddressingMode::Accumulator => {
                 let current_carry_flag = self.get_flag(CARRY_FLAG);
                 let new_carry_flag = (self.register_a & 1) == 1;
 
@@ -643,24 +648,32 @@ impl CPU {
         self.run()
     }
 
-    fn load(&mut self, program: Vec<u8>) {
-        self.memory[0x8000..(0x8000 + program.len())].copy_from_slice(&program[..]);
-        self.mem_write_u16(0xFFFC, 0x8000);
+    pub fn load(&mut self, program: Vec<u8>) {
+        self.memory[0x0600..(0x0600 + program.len())].copy_from_slice(&program[..]);
+        self.mem_write_u16(0xFFFC, 0x0600);
     }
 
-    fn reset(&mut self) {
+    pub fn reset(&mut self) {
         self.register_a = 0;
         self.register_x = 0;
         self.register_y = 0;
-        self.status = 0;
+        self.status = 0b100100;
+        self.stack_pointer = STACK_RESET;
 
         self.program_counter = self.mem_read_u16(0xFFFC);
     }
 
-    fn run(&mut self) {
+    pub fn run(&mut self) {
+        self.run_with_callback(|_| {});
+    }
+
+    pub fn run_with_callback<F>(&mut self, mut callback: F)
+    where
+        F: FnMut(&mut CPU),
+    {
         loop {
             let code = self.mem_read(self.program_counter);
-            self.program_counter += 1;
+            self.program_counter = self.program_counter.wrapping_add(1);
             let program_counter_state = self.program_counter;
 
             let opcode = OPCODES_MAP
@@ -680,9 +693,7 @@ impl CPU {
                 "BVC" => self.bvc(),
                 "BVS" => self.bvs(),
                 "BIT" => self.bit(&opcode.mode),
-                "BRK" => {
-                    break;
-                }
+                "BRK" => return,
                 "CLC" => self.clc(),
                 "CLD" => self.cld(),
                 "CLI" => self.cli(),
@@ -731,6 +742,8 @@ impl CPU {
             if program_counter_state == self.program_counter {
                 self.program_counter += (opcode.len - 1) as u16;
             }
+
+            callback(self);
         }
     }
 }

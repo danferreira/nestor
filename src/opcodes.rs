@@ -73,25 +73,25 @@ lazy_static! {
         OpCode::new(0x11, "ORA", 2, 5/*+1 if page crossed*/, AddressingMode::IndirectY),
 
         /* Shifts */
-        OpCode::new(0x0a, "ASL", 1, 2, AddressingMode::NoneAddressing),
+        OpCode::new(0x0a, "ASL", 1, 2, AddressingMode::Accumulator),
         OpCode::new(0x06, "ASL", 2, 5, AddressingMode::ZeroPage),
         OpCode::new(0x16, "ASL", 2, 6, AddressingMode::ZeroPageX),
         OpCode::new(0x0e, "ASL", 3, 6, AddressingMode::Absolute),
         OpCode::new(0x1e, "ASL", 3, 7, AddressingMode::AbsoluteX),
 
-        OpCode::new(0x4a, "LSR", 1, 2, AddressingMode::NoneAddressing),
+        OpCode::new(0x4a, "LSR", 1, 2, AddressingMode::Accumulator),
         OpCode::new(0x46, "LSR", 2, 5, AddressingMode::ZeroPage),
         OpCode::new(0x56, "LSR", 2, 6, AddressingMode::ZeroPageX),
         OpCode::new(0x4e, "LSR", 3, 6, AddressingMode::Absolute),
         OpCode::new(0x5e, "LSR", 3, 7, AddressingMode::AbsoluteX),
 
-        OpCode::new(0x2a, "ROL", 1, 2, AddressingMode::NoneAddressing),
+        OpCode::new(0x2a, "ROL", 1, 2, AddressingMode::Accumulator),
         OpCode::new(0x26, "ROL", 2, 5, AddressingMode::ZeroPage),
         OpCode::new(0x36, "ROL", 2, 6, AddressingMode::ZeroPageX),
         OpCode::new(0x2e, "ROL", 3, 6, AddressingMode::Absolute),
         OpCode::new(0x3e, "ROL", 3, 7, AddressingMode::AbsoluteX),
 
-        OpCode::new(0x6a, "ROR", 1, 2, AddressingMode::NoneAddressing),
+        OpCode::new(0x6a, "ROR", 1, 2, AddressingMode::Accumulator),
         OpCode::new(0x66, "ROR", 2, 5, AddressingMode::ZeroPage),
         OpCode::new(0x76, "ROR", 2, 6, AddressingMode::ZeroPageX),
         OpCode::new(0x6e, "ROR", 3, 6, AddressingMode::Absolute),
@@ -133,10 +133,10 @@ lazy_static! {
 
         /* Branching */
 
-        OpCode::new(0x4c, "JMP", 3, 3, AddressingMode::NoneAddressing), //AddressingMode that acts as Immidiate
-        OpCode::new(0x6c, "JMP", 3, 5, AddressingMode::NoneAddressing), //AddressingMode:Indirect with 6502 bug
+        OpCode::new(0x4c, "JMP", 3, 3, AddressingMode::Absolute), //AddressingMode that acts as Immidiate
+        OpCode::new(0x6c, "JMP", 3, 5, AddressingMode::Indirect), //AddressingMode:Indirect with 6502 bug
 
-        OpCode::new(0x20, "JSR", 3, 6, AddressingMode::NoneAddressing),
+        OpCode::new(0x20, "JSR", 3, 6, AddressingMode::Absolute),
         OpCode::new(0x60, "RTS", 1, 6, AddressingMode::NoneAddressing),
 
         OpCode::new(0x40, "RTI", 1, 6, AddressingMode::NoneAddressing),
