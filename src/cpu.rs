@@ -1,7 +1,5 @@
-use crate::{
-    memory::Memory,
-    opcodes::{Mnemonic, OPCODES_MAP},
-};
+use crate::bus::Bus;
+use crate::opcodes::{Mnemonic, OPCODES_MAP};
 
 const CARRY_FLAG: u8 = 1 << 0;
 const ZERO_FLAG: u8 = 1 << 1;
@@ -22,7 +20,7 @@ pub struct CPU {
     pub processor_status: u8,
     pub stack_pointer: u8,
     pub program_counter: u16,
-    pub memory: Memory,
+    pub bus: Bus,
 }
 
 #[derive(Debug)]
@@ -42,7 +40,7 @@ pub enum AddressingMode {
 }
 
 impl CPU {
-    pub fn new() -> Self {
+    pub fn new(bus: Bus) -> Self {
         CPU {
             register_a: 0,
             register_x: 0,
@@ -50,7 +48,7 @@ impl CPU {
             processor_status: 0,
             stack_pointer: 0xFD,
             program_counter: 0,
-            memory: Memory::new(),
+            bus: bus,
         }
     }
 
@@ -58,44 +56,44 @@ impl CPU {
         match mode {
             AddressingMode::Immediate => self.program_counter,
 
-            AddressingMode::ZeroPage => self.memory.read(self.program_counter) as u16,
+            AddressingMode::ZeroPage => self.bus.mem_read(self.program_counter) as u16,
 
-            AddressingMode::Absolute => self.memory.read_u16(self.program_counter),
+            AddressingMode::Absolute => self.bus.mem_read_u16(self.program_counter),
 
             AddressingMode::ZeroPageX => {
-                let base = self.memory.read(self.program_counter);
+                let base = self.bus.mem_read(self.program_counter);
                 let addr = base.wrapping_add(self.register_x) as u16;
                 addr
             }
             AddressingMode::ZeroPageY => {
-                let base = self.memory.read(self.program_counter);
+                let base = self.bus.mem_read(self.program_counter);
                 let addr = base.wrapping_add(self.register_y) as u16;
                 addr
             }
 
             AddressingMode::AbsoluteX => {
-                let base = self.memory.read_u16(self.program_counter);
+                let base = self.bus.mem_read_u16(self.program_counter);
                 let addr = base.wrapping_add(self.register_x as u16);
                 addr
             }
             AddressingMode::AbsoluteY => {
-                let base = self.memory.read_u16(self.program_counter);
+                let base = self.bus.mem_read_u16(self.program_counter);
                 let addr = base.wrapping_add(self.register_y as u16);
                 addr
             }
 
             AddressingMode::Indirect => {
-                let base = self.memory.read_u16(self.program_counter);
-                self.memory.read_u16(base)
+                let base = self.bus.mem_read_u16(self.program_counter);
+                self.bus.mem_read_u16(base)
             }
             AddressingMode::IndirectX => {
-                let base = self.memory.read(self.program_counter);
+                let base = self.bus.mem_read(self.program_counter);
                 let ptr = (base as u8).wrapping_add(self.register_x) & 0xFF;
-                self.memory.read_u16(ptr as u16)
+                self.bus.mem_read_u16(ptr as u16)
             }
             AddressingMode::IndirectY => {
-                let base = self.memory.read(self.program_counter);
-                let ptr = self.memory.read_u16(base as u16);
+                let base = self.bus.mem_read(self.program_counter);
+                let ptr = self.bus.mem_read_u16(base as u16);
                 ptr.wrapping_add(self.register_y as u16)
             }
 
@@ -107,7 +105,7 @@ impl CPU {
 
     fn pop_stack(&mut self) -> u8 {
         self.stack_pointer = self.stack_pointer.wrapping_add(1);
-        self.memory.read((self.stack_pointer as u16) + 0x0100)
+        self.bus.mem_read((self.stack_pointer as u16) + 0x0100)
     }
 
     fn pop_stack16(&mut self) -> u16 {
@@ -119,7 +117,7 @@ impl CPU {
 
     fn push_stack(&mut self, v: u8) {
         let addr = (self.stack_pointer as u16) + 0x0100;
-        self.memory.write(addr, v);
+        self.bus.mem_write(addr, v);
 
         self.stack_pointer = self.stack_pointer.wrapping_sub(1);
     }
@@ -131,7 +129,7 @@ impl CPU {
 
     fn adc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
-        let value = self.memory.read(addr);
+        let value = self.bus.mem_read(addr);
 
         let mut result = self.register_a as u16 + value as u16;
 
@@ -154,7 +152,7 @@ impl CPU {
 
     fn and(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(&mode);
-        let value = self.memory.read(addr);
+        let value = self.bus.mem_read(addr);
         self.register_a &= value;
 
         self.set_zero_and_negative_flags(self.register_a);
@@ -171,10 +169,10 @@ impl CPU {
             }
             _ => {
                 let addr = self.get_operand_address(&mode);
-                let value = self.memory.read(addr);
+                let value = self.bus.mem_read(addr);
                 let result = value << 1;
 
-                self.memory.write(addr, result);
+                self.bus.mem_write(addr, result);
 
                 self.set_flag(CARRY_FLAG, (value & 0x80) == 1);
                 self.set_zero_and_negative_flags(result);
@@ -183,7 +181,7 @@ impl CPU {
     }
 
     fn branch(&mut self) {
-        let offset = self.memory.read(self.program_counter) as i8;
+        let offset = self.bus.mem_read(self.program_counter) as i8;
         let jump_addr = self
             .program_counter
             .wrapping_add(1)
@@ -242,7 +240,7 @@ impl CPU {
 
     fn bit(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(&mode);
-        let value = self.memory.read(addr);
+        let value = self.bus.mem_read(addr);
 
         self.set_flag(ZERO_FLAG, (self.register_a & value) == 0);
         self.set_flag(NEGATIVE_FLAG, (value & 0x80) != 0);
@@ -253,7 +251,7 @@ impl CPU {
     //     self.push_stack16(self.program_counter);
     //     self.push_stack(self.stack_pointer);
 
-    //     self.program_counter = self.memory.read_u16(BRK_VECTOR);
+    //     self.program_counter = self.bus.mem_read_u16(BRK_VECTOR);
 
     //     self.set_flag(BREAK_FLAG, true);
     // }
@@ -276,7 +274,7 @@ impl CPU {
 
     fn cmp_register(&mut self, reg: u8, mode: &AddressingMode) {
         let addr = self.get_operand_address(&mode);
-        let value = self.memory.read(addr);
+        let value = self.bus.mem_read(addr);
         let result = reg.wrapping_sub(value);
 
         self.set_flag(CARRY_FLAG, reg >= value);
@@ -298,10 +296,10 @@ impl CPU {
 
     fn dec(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(&mode);
-        let value = self.memory.read(addr);
+        let value = self.bus.mem_read(addr);
         let result = value.wrapping_sub(1);
 
-        self.memory.write(addr, result);
+        self.bus.mem_write(addr, result);
 
         self.set_zero_and_negative_flags(result);
     }
@@ -320,7 +318,7 @@ impl CPU {
 
     fn eor(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(&mode);
-        let value = self.memory.read(addr);
+        let value = self.bus.mem_read(addr);
 
         self.register_a ^= value;
 
@@ -329,10 +327,10 @@ impl CPU {
 
     fn inc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(&mode);
-        let value = self.memory.read(addr);
+        let value = self.bus.mem_read(addr);
         let result = value.wrapping_add(1);
 
-        self.memory.write(addr, result);
+        self.bus.mem_write(addr, result);
 
         self.set_zero_and_negative_flags(result);
     }
@@ -361,7 +359,7 @@ impl CPU {
 
     fn lda(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(&mode);
-        let value = self.memory.read(addr);
+        let value = self.bus.mem_read(addr);
 
         self.set_zero_and_negative_flags(value);
 
@@ -370,7 +368,7 @@ impl CPU {
 
     fn ldx(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(&mode);
-        let value = self.memory.read(addr);
+        let value = self.bus.mem_read(addr);
 
         self.set_zero_and_negative_flags(value);
 
@@ -379,7 +377,7 @@ impl CPU {
 
     fn ldy(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(&mode);
-        let value = self.memory.read(addr);
+        let value = self.bus.mem_read(addr);
 
         self.set_zero_and_negative_flags(value);
 
@@ -397,10 +395,10 @@ impl CPU {
             }
             _ => {
                 let addr = self.get_operand_address(&mode);
-                let value = self.memory.read(addr);
+                let value = self.bus.mem_read(addr);
                 let result = value >> 1;
 
-                self.memory.write(addr, result);
+                self.bus.mem_write(addr, result);
 
                 self.set_flag(CARRY_FLAG, (value & 1) == 1);
                 self.set_zero_and_negative_flags(value);
@@ -414,7 +412,7 @@ impl CPU {
 
     fn ora(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(&mode);
-        let value = self.memory.read(addr);
+        let value = self.bus.mem_read(addr);
 
         self.register_a |= value;
 
@@ -453,14 +451,14 @@ impl CPU {
             }
             _ => {
                 let addr = self.get_operand_address(&mode);
-                let value = self.memory.read(addr);
+                let value = self.bus.mem_read(addr);
 
                 let current_carry_flag = self.get_flag(CARRY_FLAG) as u8;
                 let new_carry_flag = ((value >> 7) & 1) == 1;
 
                 let result = (value << 1) | current_carry_flag;
 
-                self.memory.write(addr, result);
+                self.bus.mem_write(addr, result);
 
                 self.set_flag(CARRY_FLAG, new_carry_flag);
                 self.set_zero_and_negative_flags(result);
@@ -485,7 +483,7 @@ impl CPU {
             }
             _ => {
                 let addr = self.get_operand_address(&mode);
-                let value = self.memory.read(addr);
+                let value = self.bus.mem_read(addr);
 
                 let current_carry_flag = self.get_flag(CARRY_FLAG);
                 let new_carry_flag = (value & 1) == 1;
@@ -496,7 +494,7 @@ impl CPU {
                     result |= 0x80;
                 }
 
-                self.memory.write(addr, result);
+                self.bus.mem_write(addr, result);
 
                 self.set_flag(CARRY_FLAG, new_carry_flag);
                 self.set_zero_and_negative_flags(result);
@@ -517,7 +515,7 @@ impl CPU {
 
     fn sbc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
-        let value = self.memory.read(addr);
+        let value = self.bus.mem_read(addr);
 
         let accumulator = self.register_a;
 
@@ -552,17 +550,17 @@ impl CPU {
 
     fn sta(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
-        self.memory.write(addr, self.register_a);
+        self.bus.mem_write(addr, self.register_a);
     }
 
     fn stx(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
-        self.memory.write(addr, self.register_x);
+        self.bus.mem_write(addr, self.register_x);
     }
 
     fn sty(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
-        self.memory.write(addr, self.register_y);
+        self.bus.mem_write(addr, self.register_y);
     }
 
     fn tax(&mut self) {
@@ -623,8 +621,10 @@ impl CPU {
     }
 
     pub fn load(&mut self, program: Vec<u8>) {
-        self.memory.ram[0x0600..(0x0600 + program.len())].copy_from_slice(&program[..]);
-        self.memory.write_u16(0xFFFC, 0x0600);
+        for i in 0..(program.len() as u16) {
+            self.bus.mem_write(0x8600 + i, program[i as usize]);
+        }
+        self.bus.mem_write_u16(0xFFFC, 0x8600);
     }
 
     pub fn reset(&mut self) {
@@ -634,7 +634,7 @@ impl CPU {
         self.processor_status = 0b100100;
         self.stack_pointer = STACK_RESET;
 
-        self.program_counter = self.memory.read_u16(0xFFFC);
+        self.program_counter = self.bus.mem_read_u16(0xFFFC);
     }
 
     pub fn run(&mut self) {
@@ -646,7 +646,7 @@ impl CPU {
         F: FnMut(&mut CPU),
     {
         loop {
-            let code = self.memory.read(self.program_counter);
+            let code = self.bus.mem_read(self.program_counter);
             self.program_counter = self.program_counter.wrapping_add(1);
             let program_counter_state = self.program_counter;
 
