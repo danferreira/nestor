@@ -1,4 +1,4 @@
-use crate::opcodes::OPCODES_MAP;
+use crate::opcodes::{Mnemonic, OPCODES_MAP};
 
 const CARRY_FLAG: u8 = 1 << 0;
 const ZERO_FLAG: u8 = 1 << 1;
@@ -10,13 +10,13 @@ const NEGATIVE_FLAG: u8 = 1 << 7;
 
 // const BRK_VECTOR: u16 = 0xfffe;
 
-const STACK_RESET: u8 = 0xfd;
+const STACK_RESET: u8 = 0xFD;
 
 pub struct CPU {
     pub register_a: u8,
     pub register_x: u8,
     pub register_y: u8,
-    pub status: u8,
+    pub processor_status: u8,
     pub stack_pointer: u8,
     pub program_counter: u16,
     memory: [u8; 65536],
@@ -73,7 +73,7 @@ impl CPU {
             register_a: 0,
             register_x: 0,
             register_y: 0,
-            status: 0,
+            processor_status: 0,
             stack_pointer: 0xFD,
             program_counter: 0,
             memory: [0; 65536],
@@ -89,13 +89,13 @@ impl CPU {
             AddressingMode::Absolute => self.mem_read_u16(self.program_counter),
 
             AddressingMode::ZeroPageX => {
-                let pos = self.mem_read(self.program_counter);
-                let addr = pos.wrapping_add(self.register_x) as u16;
+                let base = self.mem_read(self.program_counter);
+                let addr = base.wrapping_add(self.register_x) as u16;
                 addr
             }
             AddressingMode::ZeroPageY => {
-                let pos = self.mem_read(self.program_counter);
-                let addr = pos.wrapping_add(self.register_y) as u16;
+                let base = self.mem_read(self.program_counter);
+                let addr = base.wrapping_add(self.register_y) as u16;
                 addr
             }
 
@@ -452,7 +452,7 @@ impl CPU {
     }
 
     fn php(&mut self) {
-        self.push_stack(self.status | BREAK_FLAG);
+        self.push_stack(self.processor_status | BREAK_FLAG);
     }
 
     fn pla(&mut self) {
@@ -621,20 +621,20 @@ impl CPU {
     }
 
     fn get_flag(&self, flag: u8) -> bool {
-        (self.status & flag) != 0
+        (self.processor_status & flag) != 0
     }
 
     fn set_flag(&mut self, flag: u8, on: bool) {
         if on {
-            self.status |= flag;
+            self.processor_status |= flag;
         } else {
-            self.status &= !flag;
+            self.processor_status &= !flag;
         }
     }
 
     fn set_flags(&mut self, value: u8) {
         // This make sure that the bit 5 is not set
-        self.status = (value | 0x30) - 0x10;
+        self.processor_status = (value | 0x30) - 0x10;
     }
 
     fn set_zero_and_negative_flags(&mut self, value: u8) {
@@ -657,7 +657,7 @@ impl CPU {
         self.register_a = 0;
         self.register_x = 0;
         self.register_y = 0;
-        self.status = 0b100100;
+        self.processor_status = 0b100100;
         self.stack_pointer = STACK_RESET;
 
         self.program_counter = self.mem_read_u16(0xFFFC);
@@ -681,63 +681,63 @@ impl CPU {
                 .expect(&format!("OpCode {:x} is not recognized", code));
 
             match opcode.mnemonic {
-                "ADC" => self.adc(&opcode.mode),
-                "AND" => self.and(&opcode.mode),
-                "ASL" => self.asl(&opcode.mode),
-                "BCC" => self.bcc(),
-                "BCS" => self.bcs(),
-                "BEQ" => self.beq(),
-                "BNE" => self.bne(),
-                "BMI" => self.bmi(),
-                "BPL" => self.bpl(),
-                "BVC" => self.bvc(),
-                "BVS" => self.bvs(),
-                "BIT" => self.bit(&opcode.mode),
-                "BRK" => return,
-                "CLC" => self.clc(),
-                "CLD" => self.cld(),
-                "CLI" => self.cli(),
-                "CLV" => self.clv(),
-                "CMP" => self.cmp(&opcode.mode),
-                "CPX" => self.cpx(&opcode.mode),
-                "CPY" => self.cpy(&opcode.mode),
-                "DEC" => self.dec(&opcode.mode),
-                "DEX" => self.dex(),
-                "DEY" => self.dey(),
-                "EOR" => self.eor(&opcode.mode),
-                "INC" => self.inc(&opcode.mode),
-                "INX" => self.inx(),
-                "INY" => self.iny(),
-                "JMP" => self.jmp(&opcode.mode),
-                "JSR" => self.jsr(&opcode.mode),
-                "LDA" => self.lda(&opcode.mode),
-                "LDX" => self.ldx(&opcode.mode),
-                "LDY" => self.ldy(&opcode.mode),
-                "LSR" => self.lsr(&opcode.mode),
-                "NOP" => self.nop(),
-                "ORA" => self.ora(&opcode.mode),
-                "PHA" => self.pha(),
-                "PHP" => self.php(),
-                "PLA" => self.pla(),
-                "PLP" => self.plp(),
-                "ROL" => self.rol(&opcode.mode),
-                "ROR" => self.ror(&opcode.mode),
-                "RTI" => self.rti(),
-                "RTS" => self.rts(),
-                "SBC" => self.sbc(&opcode.mode),
-                "SEC" => self.sec(),
-                "SED" => self.sed(),
-                "SEI" => self.sei(),
-                "STA" => self.sta(&opcode.mode),
-                "STX" => self.stx(&opcode.mode),
-                "STY" => self.sty(&opcode.mode),
-                "TAX" => self.tax(),
-                "TAY" => self.tay(),
-                "TSX" => self.tsx(),
-                "TXA" => self.txa(),
-                "TXS" => self.txs(),
-                "TYA" => self.tya(),
-                _ => todo!("{}", opcode.mnemonic),
+                Mnemonic::ADC => self.adc(&opcode.mode),
+                Mnemonic::AND => self.and(&opcode.mode),
+                Mnemonic::ASL => self.asl(&opcode.mode),
+                Mnemonic::BCC => self.bcc(),
+                Mnemonic::BCS => self.bcs(),
+                Mnemonic::BEQ => self.beq(),
+                Mnemonic::BNE => self.bne(),
+                Mnemonic::BMI => self.bmi(),
+                Mnemonic::BPL => self.bpl(),
+                Mnemonic::BVC => self.bvc(),
+                Mnemonic::BVS => self.bvs(),
+                Mnemonic::BIT => self.bit(&opcode.mode),
+                Mnemonic::BRK => return,
+                Mnemonic::CLC => self.clc(),
+                Mnemonic::CLD => self.cld(),
+                Mnemonic::CLI => self.cli(),
+                Mnemonic::CLV => self.clv(),
+                Mnemonic::CMP => self.cmp(&opcode.mode),
+                Mnemonic::CPX => self.cpx(&opcode.mode),
+                Mnemonic::CPY => self.cpy(&opcode.mode),
+                Mnemonic::DEC => self.dec(&opcode.mode),
+                Mnemonic::DEX => self.dex(),
+                Mnemonic::DEY => self.dey(),
+                Mnemonic::EOR => self.eor(&opcode.mode),
+                Mnemonic::INC => self.inc(&opcode.mode),
+                Mnemonic::INX => self.inx(),
+                Mnemonic::INY => self.iny(),
+                Mnemonic::JMP => self.jmp(&opcode.mode),
+                Mnemonic::JSR => self.jsr(&opcode.mode),
+                Mnemonic::LDA => self.lda(&opcode.mode),
+                Mnemonic::LDX => self.ldx(&opcode.mode),
+                Mnemonic::LDY => self.ldy(&opcode.mode),
+                Mnemonic::LSR => self.lsr(&opcode.mode),
+                Mnemonic::NOP => self.nop(),
+                Mnemonic::ORA => self.ora(&opcode.mode),
+                Mnemonic::PHA => self.pha(),
+                Mnemonic::PHP => self.php(),
+                Mnemonic::PLA => self.pla(),
+                Mnemonic::PLP => self.plp(),
+                Mnemonic::ROL => self.rol(&opcode.mode),
+                Mnemonic::ROR => self.ror(&opcode.mode),
+                Mnemonic::RTI => self.rti(),
+                Mnemonic::RTS => self.rts(),
+                Mnemonic::SBC => self.sbc(&opcode.mode),
+                Mnemonic::SEC => self.sec(),
+                Mnemonic::SED => self.sed(),
+                Mnemonic::SEI => self.sei(),
+                Mnemonic::STA => self.sta(&opcode.mode),
+                Mnemonic::STX => self.stx(&opcode.mode),
+                Mnemonic::STY => self.sty(&opcode.mode),
+                Mnemonic::TAX => self.tax(),
+                Mnemonic::TAY => self.tay(),
+                Mnemonic::TSX => self.tsx(),
+                Mnemonic::TXA => self.txa(),
+                Mnemonic::TXS => self.txs(),
+                Mnemonic::TYA => self.tya(),
+                _ => todo!("{:?}", opcode.mnemonic),
             }
             if program_counter_state == self.program_counter {
                 self.program_counter += (opcode.len - 1) as u16;
@@ -757,8 +757,8 @@ mod test {
         let mut cpu = CPU::new();
         cpu.set_zero_and_negative_flags(0);
 
-        assert!(cpu.status & 0b0000_0010 == 0b10);
-        assert!(cpu.status & 0b1000_0000 == 0);
+        assert!(cpu.processor_status & 0b0000_0010 == 0b10);
+        assert!(cpu.processor_status & 0b1000_0000 == 0);
     }
 
     #[test]
