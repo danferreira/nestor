@@ -46,17 +46,17 @@ impl CPU {
             register_x: 0,
             register_y: 0,
             processor_status: 0b100100,
-            stack_pointer: 0xFD,
-            program_counter: 0,
+            stack_pointer: STACK_RESET,
+            program_counter: bus.mem_read_u16(0xFFFC),
             bus: bus,
         }
     }
 
-    pub fn get_operand_address(&self, mode: &AddressingMode) -> u16 {
+    pub fn get_operand_address(&mut self, mode: &AddressingMode) -> u16 {
         self.get_address_by_addressing_mode(mode, self.program_counter)
     }
 
-    pub fn get_address_by_addressing_mode(&self, mode: &AddressingMode, address: u16) -> u16 {
+    pub fn get_address_by_addressing_mode(&mut self, mode: &AddressingMode, address: u16) -> u16 {
         match mode {
             AddressingMode::Immediate => address,
 
