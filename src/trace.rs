@@ -16,7 +16,7 @@ pub fn trace(cpu: &mut CPU) -> String {
         | AddressingMode::NoneAddressing
         | AddressingMode::Accumulator => (0, 0),
         _ => {
-            let addr = cpu
+            let (addr, _) = cpu
                 .get_address_by_addressing_mode(&opcode.mode, cpu.program_counter.wrapping_add(1));
             (addr, cpu.bus.mem_read(addr))
         }

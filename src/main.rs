@@ -2,6 +2,7 @@ pub mod bus;
 pub mod cartridge;
 pub mod cpu;
 pub mod opcodes;
+pub mod ppu;
 pub mod trace;
 
 use bus::Bus;
@@ -20,6 +21,9 @@ use std::fs;
 
 #[macro_use]
 extern crate lazy_static;
+
+#[macro_use]
+extern crate bitflags;
 
 #[derive(Parser)]
 struct Args {
