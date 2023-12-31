@@ -25,6 +25,7 @@ pub struct NesPPU {
     pub mirroring: Mirroring,
 
     internal_data_buf: u8,
+    pub nmi_interrupt: Option<u8>,
 }
 
 impl NesPPU {
@@ -46,11 +47,18 @@ impl NesPPU {
 
             scanline: 0,
             cycles: 0,
+            nmi_interrupt: None,
         }
     }
 
     pub fn write_to_ctrl(&mut self, value: u8) {
+        let before_nmi_status = self.ctrl.generate_vblank_nmi();
         self.ctrl.update(value);
+        let updated_nmi_status = self.ctrl.generate_vblank_nmi();
+
+        if !before_nmi_status && updated_nmi_status && self.status.is_in_vblank() {
+            self.nmi_interrupt = Some(1)
+        }
     }
 
     pub fn write_to_mask(&mut self, value: u8) {
@@ -64,6 +72,13 @@ impl NesPPU {
     pub fn write_to_oam_data(&mut self, value: u8) {
         self.oam_data[self.oam_addr as usize] = value;
         self.oam_addr = self.oam_addr.wrapping_add(1);
+    }
+
+    pub fn write_oam_dma(&mut self, data: &[u8; 256]) {
+        for x in data.iter() {
+            self.oam_data[self.oam_addr as usize] = *x;
+            self.oam_addr = self.oam_addr.wrapping_add(1);
+        }
     }
 
     pub fn read_status(&mut self) -> u8 {
@@ -108,6 +123,11 @@ impl NesPPU {
                 "addr space 0x3000..0x3eff is not expected to be used, requested = {} ",
                 addr
             ),
+            0x3f10 | 0x3f14 | 0x3f18 | 0x3f1c => {
+                let add_mirror = addr - 0x10;
+                self.palette_table[(add_mirror - 0x3f00) as usize]
+            }
+
             0x3f00..=0x3fff => self.palette_table[(addr - 0x3f00) as usize],
             _ => panic!("unexpected access to mirrored space {}", addr),
         }
@@ -155,18 +175,25 @@ impl NesPPU {
             self.scanline += 1;
 
             if self.scanline == 241 {
+                self.status.set_vblank_status(true);
+                self.status.set_sprite_zero_hit(false);
                 if self.ctrl.generate_vblank_nmi() {
-                    self.status.set_vblank_status(true);
-                    todo!("Should trigger NMI interrupt")
+                    self.nmi_interrupt = Some(1);
                 }
             }
 
             if self.scanline >= 262 {
                 self.scanline = 0;
+                self.nmi_interrupt = None;
+                self.status.set_sprite_zero_hit(false);
                 self.status.reset_vblank_status();
                 return true;
             }
         }
         return false;
+    }
+
+    pub fn poll_nmi_interrupt(&mut self) -> Option<u8> {
+        self.nmi_interrupt.take()
     }
 }

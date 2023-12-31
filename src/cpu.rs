@@ -13,14 +13,14 @@ const NEGATIVE_FLAG: u8 = 1 << 7;
 
 const STACK_RESET: u8 = 0xFD;
 
-pub struct CPU {
+pub struct CPU<'a> {
     pub register_a: u8,
     pub register_x: u8,
     pub register_y: u8,
     pub processor_status: u8,
     pub stack_pointer: u8,
     pub program_counter: u16,
-    pub bus: Bus,
+    pub bus: Bus<'a>,
 }
 
 #[derive(Debug)]
@@ -43,15 +43,15 @@ fn page_cross(addr1: u16, addr2: u16) -> bool {
     addr1 & 0xFF00 != addr2 & 0xFF00
 }
 
-impl CPU {
-    pub fn new(mut bus: Bus) -> Self {
+impl<'a> CPU<'a> {
+    pub fn new<'b>(bus: Bus<'b>) -> CPU<'b> {
         CPU {
             register_a: 0,
             register_x: 0,
             register_y: 0,
             processor_status: 0b100100,
             stack_pointer: STACK_RESET,
-            program_counter: bus.mem_read_u16(0xFFFC),
+            program_counter: 0,
             bus: bus,
         }
     }
@@ -231,9 +231,8 @@ impl CPU {
 
         self.program_counter = jump_addr;
 
+        self.bus.tick(1);
         if initial_high_byte != target_high_byte {
-            self.bus.tick(2);
-        } else {
             self.bus.tick(1);
         }
     }
@@ -830,6 +829,19 @@ impl CPU {
         self.set_flag(NEGATIVE_FLAG, (value & 0x80) != 0);
     }
 
+    fn interrupt_nmi(&mut self) {
+        self.push_stack16(self.program_counter);
+
+        self.set_flag(BREAK_FLAG, false);
+
+        self.push_stack(self.processor_status);
+
+        self.set_flag(IRQ_FLAG, true);
+
+        self.bus.tick(2);
+        self.program_counter = self.bus.mem_read_u16(0xFFFA);
+    }
+
     pub fn load(&mut self, program: Vec<u8>) {
         for i in 0..(program.len() as u16) {
             self.bus.mem_write(0x8600 + i, program[i as usize]);
@@ -849,14 +861,11 @@ impl CPU {
     }
 
     pub fn run(&mut self) {
-        self.run_with_callback(|_| {});
-    }
-
-    pub fn run_with_callback<F>(&mut self, mut callback: F)
-    where
-        F: FnMut(&mut CPU),
-    {
         loop {
+            if self.bus.poll_nmi_status().is_some() {
+                self.interrupt_nmi();
+            }
+
             let code = self.bus.mem_read(self.program_counter);
             self.program_counter = self.program_counter.wrapping_add(1);
             let program_counter_state = self.program_counter;
@@ -938,8 +947,6 @@ impl CPU {
             if program_counter_state == self.program_counter {
                 self.program_counter += (opcode.len - 1) as u16;
             }
-
-            callback(self);
         }
     }
 }
