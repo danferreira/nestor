@@ -36,9 +36,9 @@ fn main() {
         .build()
         .unwrap();
 
-    let mut canvas = window.into_canvas().present_vsync().build().unwrap();
     let mut event_pump = sdl_context.event_pump().unwrap();
-    canvas.set_scale(3.0, 3.0).unwrap();
+    let mut canvas = window.into_canvas().present_vsync().build().unwrap();
+    // canvas.set_scale(3.0, 3.0).unwrap();
 
     let creator = canvas.texture_creator();
     let mut texture = creator
@@ -55,7 +55,7 @@ fn main() {
     key_map.insert(Keycode::A, joypad::JoypadButton::BUTTON_A);
     key_map.insert(Keycode::S, joypad::JoypadButton::BUTTON_B);
 
-    let game_code = fs::read("./roms/pacman.nes").expect("Should have been able to read the game");
+    let game_code = fs::read("./roms/super.nes").expect("Should have been able to read the game");
     let rom = Rom::new(&game_code).unwrap();
 
     let mut frame = Frame::new();
@@ -63,7 +63,7 @@ fn main() {
     // the game cycle
     let bus = Bus::new(rom, move |ppu: &NesPPU, joypad: &mut joypad::Joypad| {
         render::render(ppu, &mut frame);
-        texture.update(None, &frame.data, 256 * 3).unwrap();
+        texture.update(None, &frame.data, 256 * 2 * 3).unwrap();
 
         canvas.copy(&texture, None, None).unwrap();
 
