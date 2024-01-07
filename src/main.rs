@@ -7,18 +7,17 @@ pub mod ppu;
 pub mod render;
 pub mod trace;
 
+use std::collections::HashMap;
+use std::fs;
+
 use bus::Bus;
 use cartridge::Rom;
 use cpu::CPU;
 use ppu::NesPPU;
-
+use render::frame::Frame;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::PixelFormatEnum;
-use std::collections::HashMap;
-use std::fs;
-
-use crate::render::frame::Frame;
 
 #[macro_use]
 extern crate lazy_static;
@@ -31,7 +30,7 @@ fn main() {
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     let window = video_subsystem
-        .window("NEStor", (256.0 * 3.0) as u32, (240.0 * 3.0) as u32)
+        .window("NEStor", (256 * 3) as u32, (240 * 3) as u32)
         .position_centered()
         .build()
         .unwrap();
@@ -45,6 +44,11 @@ fn main() {
         .create_texture_target(PixelFormatEnum::RGB24, 256, 240)
         .unwrap();
 
+    let game_code = fs::read("./roms/ice.nes").expect("Should have been able to read the game");
+    let rom = Rom::new(&game_code).unwrap();
+
+    let mut frame = Frame::new();
+
     let mut key_map = HashMap::new();
     key_map.insert(Keycode::Down, joypad::JoypadButton::DOWN);
     key_map.insert(Keycode::Up, joypad::JoypadButton::UP);
@@ -55,19 +59,16 @@ fn main() {
     key_map.insert(Keycode::A, joypad::JoypadButton::BUTTON_A);
     key_map.insert(Keycode::S, joypad::JoypadButton::BUTTON_B);
 
-    let game_code = fs::read("./roms/super.nes").expect("Should have been able to read the game");
-    let rom = Rom::new(&game_code).unwrap();
-
-    let mut frame = Frame::new();
-
     // the game cycle
     let bus = Bus::new(rom, move |ppu: &NesPPU, joypad: &mut joypad::Joypad| {
         render::render(ppu, &mut frame);
+
         texture.update(None, &frame.data, 256 * 2 * 3).unwrap();
 
         canvas.copy(&texture, None, None).unwrap();
 
         canvas.present();
+
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit { .. }
@@ -86,6 +87,7 @@ fn main() {
                         joypad.set_button_pressed_status(*key, false);
                     }
                 }
+
                 _ => { /* do nothing */ }
             }
         }
