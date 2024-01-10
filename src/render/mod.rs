@@ -59,7 +59,8 @@ fn render_nametable(
         let tile_index = nametable[i] as usize;
         let bank = ppu.ctrl.bknd_pattern_addr() as usize;
 
-        let tile_block = &ppu.chr_rom[(bank + tile_index * 16)..(bank + tile_index * 16 + 16)];
+        let tile_block =
+            &ppu.rom.borrow().chr_rom[(bank + tile_index * 16)..(bank + tile_index * 16 + 16)];
 
         let tile_x = i % 32;
         let tile_y = i / 32;
@@ -110,7 +111,8 @@ fn render_sprites(ppu: &NesPPU, frame: &mut Frame) {
         let sprite_palette = sprite_palette(ppu, palette_idx);
         let bank = ppu.ctrl.sprt_pattern_addr() as usize;
 
-        let tile_block = &ppu.chr_rom[(bank + tile_idx * 16)..(bank + tile_idx * 16 + 16)];
+        let tile_block =
+            &ppu.rom.borrow().chr_rom[(bank + tile_idx * 16)..(bank + tile_idx * 16 + 16)];
 
         for y in 0..8 {
             let mut lower = tile_block[y];
@@ -138,22 +140,26 @@ fn render_sprites(ppu: &NesPPU, frame: &mut Frame) {
 }
 
 pub fn render(ppu: &NesPPU, frame: &mut Frame) {
-    let (main_nametable, second_nametable) = match (&ppu.mirroring, ppu.ctrl.nametable_addr()) {
-        (Mirroring::Vertical, 0x2000) | (Mirroring::Vertical, 0x2800) => {
-            (&ppu.vram[0..0x400], &ppu.vram[0x400..0x800])
-        }
-        (Mirroring::Vertical, 0x2400) | (Mirroring::Vertical, 0x2C00) => {
-            (&ppu.vram[0x400..0x800], &ppu.vram[0x0..0x400])
-        }
-        (Mirroring::Horizontal, 0x2000) | (Mirroring::Horizontal, 0x2400) => {
-            (&ppu.vram[0..0x400], &ppu.vram[0x400..0x800])
-        }
-        (Mirroring::Horizontal, 0x2800) | (Mirroring::Horizontal, 0x2C00) => {
-            (&ppu.vram[0x400..0x800], &ppu.vram[0x0..0x400])
-        }
+    let (main_nametable, second_nametable) =
+        match (&ppu.rom.borrow().mirroring, ppu.ctrl.nametable_addr()) {
+            (Mirroring::Vertical, 0x2000) | (Mirroring::Vertical, 0x2800) => {
+                (&ppu.vram[0..0x400], &ppu.vram[0x400..0x800])
+            }
+            (Mirroring::Vertical, 0x2400) | (Mirroring::Vertical, 0x2C00) => {
+                (&ppu.vram[0x400..0x800], &ppu.vram[0x0..0x400])
+            }
+            (Mirroring::Horizontal, 0x2000) | (Mirroring::Horizontal, 0x2400) => {
+                (&ppu.vram[0..0x400], &ppu.vram[0x400..0x800])
+            }
+            (Mirroring::Horizontal, 0x2800) | (Mirroring::Horizontal, 0x2C00) => {
+                (&ppu.vram[0x400..0x800], &ppu.vram[0x0..0x400])
+            }
 
-        _ => panic!("Not supported mirroring type {:?}", ppu.mirroring),
-    };
+            _ => panic!(
+                "Not supported mirroring type {:?}",
+                ppu.rom.borrow().mirroring
+            ),
+        };
 
     let scroll_x = ppu.scroll.scroll_x as usize;
     let scroll_y = ppu.scroll.scroll_y as usize;

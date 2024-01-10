@@ -2,6 +2,7 @@ pub mod bus;
 pub mod cartridge;
 pub mod cpu;
 pub mod joypad;
+pub mod mapper;
 pub mod opcodes;
 pub mod ppu;
 pub mod render;
@@ -17,7 +18,10 @@ use ppu::NesPPU;
 use render::frame::Frame;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
-use sdl2::pixels::PixelFormatEnum;
+use sdl2::pixels::{Color, PixelFormatEnum};
+use sdl2::rect::Rect;
+use sdl2::render::Canvas;
+use sdl2::video::Window;
 
 #[macro_use]
 extern crate lazy_static;
@@ -44,7 +48,7 @@ fn main() {
         .create_texture_target(PixelFormatEnum::RGB24, 256, 240)
         .unwrap();
 
-    let game_code = fs::read("./roms/ice.nes").expect("Should have been able to read the game");
+    let game_code = fs::read("./roms/super.nes").expect("Should have been able to read the game");
     let rom = Rom::new(&game_code).unwrap();
 
     let mut frame = Frame::new();
@@ -66,6 +70,8 @@ fn main() {
         texture.update(None, &frame.data, 256 * 2 * 3).unwrap();
 
         canvas.copy(&texture, None, None).unwrap();
+
+        render_tile_borders(&mut canvas);
 
         canvas.present();
 
@@ -96,4 +102,21 @@ fn main() {
     let mut cpu = CPU::new(bus);
     cpu.reset();
     cpu.run();
+}
+
+pub fn render_tile_borders(canvas: &mut Canvas<Window>) {
+    let scale = 3;
+    canvas.set_draw_color(Color::RGB(200, 200, 200));
+
+    for x in 0..32 {
+        for y in 0..30 {
+            let rect = Rect::new(
+                8 * x * scale,
+                8 * y * scale,
+                8 * scale as u32,
+                8 * scale as u32,
+            );
+            canvas.draw_rect(rect).unwrap();
+        }
+    }
 }

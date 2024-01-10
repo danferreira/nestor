@@ -1,4 +1,7 @@
-use crate::cartridge::Mirroring;
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use crate::cartridge::{Mirroring, Rom};
 use registers::addr::AddrRegister;
 use registers::control::ControlRegister;
 use registers::mask::MaskRegister;
@@ -7,9 +10,9 @@ use registers::status::StatusRegister;
 
 pub mod registers;
 pub struct NesPPU {
-    pub chr_rom: Vec<u8>,
-    pub palette_table: [u8; 32],
+    pub rom: Rc<RefCell<Rom>>,
     pub vram: [u8; 2048],
+    pub palette_table: [u8; 32],
     pub oam_data: [u8; 256],
     pub oam_addr: u8,
 
@@ -22,17 +25,14 @@ pub struct NesPPU {
     pub scroll: ScrollRegister,
     pub status: StatusRegister,
 
-    pub mirroring: Mirroring,
-
     internal_data_buf: u8,
     pub nmi_interrupt: Option<u8>,
 }
 
 impl NesPPU {
-    pub fn new(chr_rom: Vec<u8>, mirroring: Mirroring) -> Self {
+    pub fn new(rom: Rc<RefCell<Rom>>) -> Self {
         NesPPU {
-            chr_rom: chr_rom,
-            mirroring: mirroring,
+            rom,
             vram: [0; 2048],
             oam_data: [0; 64 * 4],
             oam_addr: 0,
@@ -111,7 +111,7 @@ impl NesPPU {
         match addr {
             0..=0x1fff => {
                 let result = self.internal_data_buf;
-                self.internal_data_buf = self.chr_rom[addr as usize];
+                self.internal_data_buf = self.rom.borrow().mapper.read(addr);
                 result
             }
             0x2000..=0x2fff => {
@@ -159,7 +159,7 @@ impl NesPPU {
         let mirrored_vram = addr & 0b10111111111111; // mirror down 0x3000-0x3eff to 0x2000 - 0x2eff
         let vram_index = mirrored_vram - 0x2000; // to vram vector
         let name_table = vram_index / 0x400; // to the name table index
-        match (&self.mirroring, name_table) {
+        match (&self.rom.borrow().mirroring, name_table) {
             (Mirroring::Vertical, 2) | (Mirroring::Vertical, 3) => vram_index - 0x800,
             (Mirroring::Horizontal, 2) => vram_index - 0x400,
             (Mirroring::Horizontal, 1) => vram_index - 0x400,

@@ -44,7 +44,7 @@ fn page_cross(addr1: u16, addr2: u16) -> bool {
 }
 
 impl<'a> CPU<'a> {
-    pub fn new<'b>(bus: Bus<'b>) -> CPU<'b> {
+    pub fn new(bus: Bus) -> CPU {
         CPU {
             register_a: 0,
             register_x: 0,
@@ -52,7 +52,7 @@ impl<'a> CPU<'a> {
             processor_status: 0b100100,
             stack_pointer: STACK_RESET,
             program_counter: 0,
-            bus: bus,
+            bus,
         }
     }
 

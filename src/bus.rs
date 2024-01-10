@@ -1,8 +1,10 @@
+use std::{cell::RefCell, rc::Rc};
+
 use crate::{cartridge::Rom, joypad::Joypad, ppu::NesPPU};
 
 pub struct Bus<'call> {
     cpu_vram: [u8; 2048],
-    prg_rom: Vec<u8>,
+    rom: Rc<RefCell<Rom>>,
     ppu: NesPPU,
     joypad1: Joypad,
 
@@ -10,17 +12,18 @@ pub struct Bus<'call> {
     gameloop_callback: Box<dyn FnMut(&NesPPU, &mut Joypad) + 'call>,
 }
 
-impl<'a> Bus<'a> {
-    pub fn new<'call, F>(rom: Rom, gameloop_callback: F) -> Bus<'call>
+impl<'call> Bus<'call> {
+    pub fn new<F>(rom: Rom, gameloop_callback: F) -> Bus<'call>
     where
         F: FnMut(&NesPPU, &mut Joypad) + 'call,
     {
-        let ppu = NesPPU::new(rom.chr_rom, rom.screen_mirroring);
+        let rom_rc = Rc::new(RefCell::new(rom));
+        let ppu = NesPPU::new(Rc::clone(&rom_rc));
 
         Bus {
             cpu_vram: [0; 2048],
-            prg_rom: rom.prg_rom,
-            ppu: ppu,
+            rom: rom_rc,
+            ppu,
             cycles: 0,
             joypad1: Joypad::new(),
             gameloop_callback: Box::from(gameloop_callback),
@@ -37,15 +40,6 @@ impl<'a> Bus<'a> {
         if !nmi_before && nmi_after {
             (self.gameloop_callback)(&self.ppu, &mut self.joypad1);
         }
-    }
-
-    fn read_prg_rom(&self, mut addr: u16) -> u8 {
-        addr -= 0x8000;
-        if self.prg_rom.len() == 0x4000 && addr >= 0x4000 {
-            //mirror if needed
-            addr = addr % 0x4000;
-        }
-        self.prg_rom[addr as usize]
     }
 
     pub fn poll_nmi_status(&mut self) -> Option<u8> {
@@ -81,7 +75,9 @@ impl<'a> Bus<'a> {
                 // ignore joypad 2
                 0
             }
-            0x8000..=0xFFFF => self.read_prg_rom(addr),
+            // 0x8000..=0xFFFF => self.read_prg_rom(addr),
+            0x8000..=0xFFFF => self.rom.borrow_mut().mapper.read(addr),
+
             _ => {
                 println!("Ignoring mem access at {:04X}", addr);
                 0
@@ -148,9 +144,7 @@ impl<'a> Bus<'a> {
                 // let add_cycles: u16 = if self.cycles % 2 == 1 { 514 } else { 513 };
                 // self.tick(add_cycles); //todo this will cause weird effects as PPU will have 513/514 * 3 ticks
             }
-            0x8000..=0xFFFF => {
-                panic!("Attempt to write to Cartridge ROM space")
-            }
+            0x8000..=0xFFFF => self.rom.borrow_mut().mapper.write(addr, data),
             _ => {
                 println!("Ignoring mem write-access at {:04X}", addr);
             }
