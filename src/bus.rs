@@ -75,6 +75,9 @@ impl<'call> Bus<'call> {
                 // ignore joypad 2
                 0
             }
+
+            // SRAM
+            0x6000..=0x7fff => self.rom.borrow_mut().mapper.read(addr),
             // 0x8000..=0xFFFF => self.read_prg_rom(addr),
             0x8000..=0xFFFF => self.rom.borrow_mut().mapper.read(addr),
 
@@ -144,6 +147,8 @@ impl<'call> Bus<'call> {
                 // let add_cycles: u16 = if self.cycles % 2 == 1 { 514 } else { 513 };
                 // self.tick(add_cycles); //todo this will cause weird effects as PPU will have 513/514 * 3 ticks
             }
+            // SRAM
+            0x6000..=0x7fff => self.rom.borrow_mut().mapper.write(addr, data),
             0x8000..=0xFFFF => self.rom.borrow_mut().mapper.write(addr, data),
             _ => {
                 println!("Ignoring mem write-access at {:04X}", addr);

@@ -1,4 +1,4 @@
-use crate::mapper::{Mapper, Mapper0};
+use crate::mapper::{Mapper, Mapper0, Mapper3};
 
 const NES_TAG: [u8; 4] = [0x4E, 0x45, 0x53, 0x1A];
 const PRG_ROM_PAGE_SIZE: usize = 16384;
@@ -29,6 +29,31 @@ impl Rom {
             return Err("NES2.0 format is not supported".to_string());
         }
 
+        let prg_rom_size = raw[4] as usize * PRG_ROM_PAGE_SIZE;
+        let chr_rom_size = raw[5] as usize * CHR_ROM_PAGE_SIZE;
+
+        // ROM Control Byte 1:
+        // • Bit 0 - Indicates the type of mirroring used by the game
+        // where 0 indicates horizontal mirroring, 1 indicates
+        // vertical mirroring.
+        // • Bit 1 - Indicates the presence of battery-backed RAM at
+        // memory locations $6000-$7FFF.
+        // • Bit 2 - Indicates the presence of a 512-byte trainer at
+        // memory locations $7000-$71FF.
+        // • Bit 3 - If this bit is set it overrides bit 0 to indicate fourscreen mirroring should be used.
+        // • Bits 4-7 - Four lower bits of the mapper number.
+        let skip_trainer = raw[6] & 0b100 != 0;
+
+        let prg_rom_start = 16 + if skip_trainer { 512 } else { 0 };
+        let chr_rom_start = prg_rom_start + prg_rom_size;
+
+        let prg_rom = raw[prg_rom_start..(prg_rom_start + prg_rom_size)].to_vec();
+        let mut chr_rom = raw[chr_rom_start..(chr_rom_start + chr_rom_size)].to_vec();
+
+        if chr_rom_size == 0 {
+            chr_rom = vec![0; 8192];
+        }
+
         let four_screen = raw[6] & 0b1000 != 0;
         let vertical_mirroring = raw[6] & 0b1 != 0;
         let mirroring = match (four_screen, vertical_mirroring) {
@@ -37,21 +62,11 @@ impl Rom {
             (false, false) => Mirroring::Horizontal,
         };
 
-        let prg_rom_size = raw[4] as usize * PRG_ROM_PAGE_SIZE;
-        let chr_rom_size = raw[5] as usize * CHR_ROM_PAGE_SIZE;
-
-        let skip_trainer = raw[6] & 0b100 != 0;
-
-        let prg_rom_start = 16 + if skip_trainer { 512 } else { 0 };
-        let chr_rom_start = prg_rom_start + prg_rom_size;
-
-        let prg_rom = raw[prg_rom_start..(prg_rom_start + prg_rom_size)].to_vec();
-        let chr_rom = raw[chr_rom_start..(chr_rom_start + chr_rom_size)].to_vec();
-
         let mapper_idx = (raw[7] & 0b1111_0000) | (raw[6] >> 4);
 
-        let mapper = match mapper_idx {
+        let mapper: Box<dyn Mapper> = match mapper_idx {
             0 => Box::new(Mapper0::new(prg_rom.clone(), chr_rom.clone())),
+            3 => Box::new(Mapper3::new(prg_rom.clone(), chr_rom.clone())),
             _ => panic!("Mapper not implement yet {mapper_idx}"),
         };
 
