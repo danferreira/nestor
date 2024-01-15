@@ -21,6 +21,7 @@ pub struct CPU<'a> {
     pub stack_pointer: u8,
     pub program_counter: u16,
     pub bus: Bus<'a>,
+    pub cycles: u64,
 }
 
 #[derive(Debug)]
@@ -53,6 +54,7 @@ impl<'a> CPU<'a> {
             stack_pointer: STACK_RESET,
             program_counter: 0,
             bus,
+            cycles: 0,
         }
     }
 
@@ -181,7 +183,7 @@ impl<'a> CPU<'a> {
         self.register_a = result;
 
         if page_cross {
-            self.bus.tick(1);
+            self.cycles += 1;
         }
     }
 
@@ -193,7 +195,7 @@ impl<'a> CPU<'a> {
         self.set_zero_and_negative_flags(self.register_a);
 
         if page_cross {
-            self.bus.tick(1);
+            self.cycles += 1;
         }
     }
 
@@ -231,9 +233,9 @@ impl<'a> CPU<'a> {
 
         self.program_counter = jump_addr;
 
-        self.bus.tick(1);
+        self.cycles += 1;
         if initial_high_byte != target_high_byte {
-            self.bus.tick(1);
+            self.cycles += 1;
         }
     }
 
@@ -329,7 +331,7 @@ impl<'a> CPU<'a> {
         self.set_flag(NEGATIVE_FLAG, (result & 0x80) != 0);
 
         if page_cross {
-            self.bus.tick(1);
+            self.cycles += 1;
         }
     }
 
@@ -376,7 +378,7 @@ impl<'a> CPU<'a> {
         self.set_zero_and_negative_flags(self.register_a);
 
         if page_cross {
-            self.bus.tick(1);
+            self.cycles += 1;
         }
     }
 
@@ -421,7 +423,7 @@ impl<'a> CPU<'a> {
         self.register_a = value;
 
         if page_cross {
-            self.bus.tick(1);
+            self.cycles += 1;
         }
     }
 
@@ -434,7 +436,7 @@ impl<'a> CPU<'a> {
         self.register_x = value;
 
         if page_cross {
-            self.bus.tick(1);
+            self.cycles += 1;
         }
     }
 
@@ -447,7 +449,7 @@ impl<'a> CPU<'a> {
         self.register_y = value;
 
         if page_cross {
-            self.bus.tick(1);
+            self.cycles += 1;
         }
     }
 
@@ -486,7 +488,7 @@ impl<'a> CPU<'a> {
         self.set_zero_and_negative_flags(self.register_a);
 
         if page_cross {
-            self.bus.tick(1);
+            self.cycles += 1;
         }
     }
 
@@ -607,7 +609,7 @@ impl<'a> CPU<'a> {
         self.set_zero_and_negative_flags(self.register_a);
 
         if page_cross {
-            self.bus.tick(1);
+            self.cycles += 1;
         }
     }
 
@@ -832,7 +834,7 @@ impl<'a> CPU<'a> {
     fn interrupt_nmi(&mut self) {
         self.push_stack16(self.program_counter);
 
-        self.set_flag(BREAK_FLAG, false);
+        self.cycles += 7;
 
         self.push_stack(self.processor_status);
 
@@ -862,6 +864,7 @@ impl<'a> CPU<'a> {
 
     pub fn run(&mut self) {
         loop {
+            let start_cycles = self.cycles;
             if self.bus.poll_nmi_status().is_some() {
                 self.interrupt_nmi();
             }
@@ -947,6 +950,9 @@ impl<'a> CPU<'a> {
             if program_counter_state == self.program_counter {
                 self.program_counter += (opcode.len - 1) as u16;
             }
+            self.cycles += opcode.cycles as u64;
+
+            self.bus.tick((self.cycles - start_cycles) as u8);
         }
     }
 }
