@@ -694,34 +694,40 @@ impl<'a> CPU<'a> {
     }
 
     fn dcp(&mut self, mode: &AddressingMode) {
+        // dec
         let (addr, _) = self.get_operand_address(&mode);
         let value = self.bus.mem_read(addr);
+
         let decremented_value = value.wrapping_sub(1);
 
         self.bus.mem_write(addr, decremented_value);
 
-        self.set_flag(CARRY_FLAG, self.register_a >= value);
+        // cmp
+        self.set_flag(CARRY_FLAG, self.register_a >= decremented_value);
         self.set_zero_and_negative_flags(self.register_a.wrapping_sub(decremented_value));
     }
 
     fn isb(&mut self, mode: &AddressingMode) {
+        // inc
         let (addr, _) = self.get_operand_address(&mode);
         let value = self.bus.mem_read(addr);
+
         let incremented_value = value.wrapping_add(1);
 
         self.bus.mem_write(addr, incremented_value);
 
-        let borrow = if self.get_flag(CARRY_FLAG) { 0 } else { 1 };
+        // sbc
+        let accumulator = self.register_a;
 
-        let result = self
-            .register_a
-            .wrapping_sub(incremented_value)
-            .wrapping_sub(borrow);
+        let carry_flag = self.get_flag(CARRY_FLAG) as u8;
 
-        self.set_flag(CARRY_FLAG, self.register_a >= result);
+        let (v1, o1) = accumulator.overflowing_sub(incremented_value);
+        let (result, o2) = v1.overflowing_sub(1 - carry_flag);
 
-        let overflow = ((self.register_a ^ value) as u8) & 0x80 != 0
-            && ((self.register_a ^ result) as u8) & 0x80 != 0;
+        self.set_flag(CARRY_FLAG, !(o1 | o2));
+
+        let overflow =
+            ((accumulator ^ result) & 0x80) != 0 && ((accumulator ^ incremented_value) & 0x80) != 0;
 
         self.set_flag(OVERFLOW_FLAG, overflow);
 
