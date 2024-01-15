@@ -670,6 +670,15 @@ impl<'a> CPU<'a> {
     }
 
     // Unoficial
+    pub fn anc(&mut self, mode: &AddressingMode) {
+        let (addr, _) = self.get_operand_address(&mode);
+        let value = self.bus.mem_read(addr);
+
+        self.register_a = self.register_a & value;
+        self.set_flag(CARRY_FLAG, (self.register_a & 0x80) != 0);
+        self.set_zero_and_negative_flags(self.register_a);
+    }
+
     fn lax(&mut self, mode: &AddressingMode) {
         let (addr, _) = self.get_operand_address(&mode);
         let value = self.bus.mem_read(addr);
@@ -935,6 +944,7 @@ impl<'a> CPU<'a> {
                 Mnemonic::TXS => self.txs(),
                 Mnemonic::TYA => self.tya(),
                 // Unoficial
+                Mnemonic::ANC => self.anc(&opcode.mode),
                 Mnemonic::LAX => self.lax(&opcode.mode),
                 Mnemonic::SAX => self.sax(&opcode.mode),
                 Mnemonic::DCP => self.dcp(&opcode.mode),
@@ -950,6 +960,7 @@ impl<'a> CPU<'a> {
             if program_counter_state == self.program_counter {
                 self.program_counter += (opcode.len - 1) as u16;
             }
+
             self.cycles += opcode.cycles as u64;
 
             self.bus.tick((self.cycles - start_cycles) as u8);
