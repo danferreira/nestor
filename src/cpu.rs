@@ -594,13 +594,12 @@ impl<'a> CPU<'a> {
 
         let carry_flag = self.get_flag(CARRY_FLAG) as u8;
 
-        let result = accumulator.wrapping_sub(value).wrapping_sub(1 - carry_flag);
+        let (v1, o1) = accumulator.overflowing_sub(value);
+        let (result, o2) = v1.overflowing_sub(1 - carry_flag);
 
-        // Update the Carry flag (set if there was no borrow)
-        self.set_flag(CARRY_FLAG, result <= accumulator);
+        self.set_flag(CARRY_FLAG, !(o1 | o2));
 
-        let overflow =
-            ((accumulator ^ value) as u8) & 0x80 != 0 && ((accumulator ^ result) as u8) & 0x80 != 0;
+        let overflow = ((accumulator ^ result) & 0x80) != 0 && ((accumulator ^ value) & 0x80) != 0;
 
         self.set_flag(OVERFLOW_FLAG, overflow);
 
