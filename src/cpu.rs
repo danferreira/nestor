@@ -669,6 +669,23 @@ impl<'a> CPU<'a> {
     }
 
     // Unoficial
+    pub fn alr(&mut self, mode: &AddressingMode) {
+        // and + lsr
+        let (addr, _) = self.get_operand_address(&mode);
+        let value = self.bus.mem_read(addr);
+
+        let and_result = self.register_a & value;
+        let shift_result = and_result >> 1;
+
+        // Update flags
+        self.set_flag(CARRY_FLAG, and_result & 0x01 != 0); // Carry is old bit 0
+        self.set_flag(ZERO_FLAG, shift_result == 0);
+        self.set_flag(NEGATIVE_FLAG, shift_result & 0x80 != 0); // Should always be clear for ASR
+
+        // Store the result back in the accumulator
+        self.register_a = shift_result;
+    }
+
     pub fn anc(&mut self, mode: &AddressingMode) {
         let (addr, _) = self.get_operand_address(&mode);
         let value = self.bus.mem_read(addr);
@@ -678,14 +695,52 @@ impl<'a> CPU<'a> {
         self.set_zero_and_negative_flags(self.register_a);
     }
 
-    fn lax(&mut self, mode: &AddressingMode) {
+    pub fn arr(&mut self, mode: &AddressingMode) {
+        // and + ror
         let (addr, _) = self.get_operand_address(&mode);
+        let value = self.bus.mem_read(addr);
+
+        let carry = self.get_flag(CARRY_FLAG) as u8;
+
+        let and_result = self.register_a & value;
+        let result = (and_result >> 1) | (carry << 7);
+
+        // Store the result back in the accumulator
+        self.register_a = result;
+
+        // Update flags
+        let bit_5 = (result >> 5) & 1;
+        let bit_6 = (result >> 6) & 1;
+
+        self.set_flag(CARRY_FLAG, bit_6 == 1);
+        self.set_flag(OVERFLOW_FLAG, bit_5 ^ bit_6 == 1);
+        self.set_zero_and_negative_flags(result);
+    }
+
+    pub fn axs(&mut self, mode: &AddressingMode) {
+        let (addr, _) = self.get_operand_address(&mode);
+        let value = self.bus.mem_read(addr);
+
+        let (result, overflow) = (self.register_a & self.register_x).overflowing_sub(value);
+
+        self.register_x = result;
+
+        self.set_flag(CARRY_FLAG, !overflow);
+        self.set_zero_and_negative_flags(self.register_x);
+    }
+
+    fn lax(&mut self, mode: &AddressingMode) {
+        let (addr, page_cross) = self.get_operand_address(&mode);
         let value = self.bus.mem_read(addr);
 
         self.register_a = value;
         self.register_x = value;
 
         self.set_zero_and_negative_flags(value);
+
+        if page_cross {
+            self.cycles += 1;
+        }
     }
 
     fn sax(&mut self, mode: &AddressingMode) {
@@ -768,6 +823,24 @@ impl<'a> CPU<'a> {
         self.register_a &= result;
 
         self.set_zero_and_negative_flags(self.register_a);
+    }
+
+    fn shx(&mut self) {
+        let (addr, _) = self.get_operand_address(&AddressingMode::Absolute);
+
+        let hi = (addr >> 8) as u8;
+        let result = self.register_x & hi.wrapping_add(1);
+
+        self.bus.mem_write(addr, result);
+    }
+
+    fn shy(&mut self) {
+        let (addr, _) = self.get_operand_address(&AddressingMode::Absolute);
+
+        let hi = (addr >> 8) as u8;
+        let result = self.register_y & hi.wrapping_add(1);
+
+        self.bus.mem_write(addr, result);
     }
 
     fn sre(&mut self, mode: &AddressingMode) {
@@ -949,13 +1022,18 @@ impl<'a> CPU<'a> {
                 Mnemonic::TXS => self.txs(),
                 Mnemonic::TYA => self.tya(),
                 // Unoficial
+                Mnemonic::ALR => self.alr(&opcode.mode),
+                Mnemonic::ARR => self.arr(&opcode.mode),
                 Mnemonic::ANC => self.anc(&opcode.mode),
+                Mnemonic::AXS => self.axs(&opcode.mode),
                 Mnemonic::LAX => self.lax(&opcode.mode),
                 Mnemonic::SAX => self.sax(&opcode.mode),
                 Mnemonic::DCP => self.dcp(&opcode.mode),
                 Mnemonic::ISB => self.isb(&opcode.mode),
                 Mnemonic::SLO => self.slo(&opcode.mode),
                 Mnemonic::RLA => self.rla(&opcode.mode),
+                Mnemonic::SHX => self.shx(),
+                Mnemonic::SHY => self.shy(),
                 Mnemonic::SRE => self.sre(&opcode.mode),
                 Mnemonic::RRA => self.rra(&opcode.mode),
                 _ => todo!("{:?}", opcode.mnemonic),

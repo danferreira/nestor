@@ -427,6 +427,7 @@ lazy_static! {
         OpCode::new(0x9e, Mnemonic::SHX, "*SHX", 3, /* guess */ 4/* or 5*/, AddressingMode::AbsoluteY), //todo: highly unstable and not used
         OpCode::new(0x9c, Mnemonic::SHY, "*SHY", 3, /* guess */ 4/* or 5*/, AddressingMode::AbsoluteX), //todo: highly unstable and not used
 
+        OpCode::new(0xab, Mnemonic::LAX, "*LAX", 2, 3, AddressingMode::Immediate), //todo: highly unstable and not used
         OpCode::new(0xa7, Mnemonic::LAX, "*LAX", 2, 3, AddressingMode::ZeroPage),
         OpCode::new(0xb7, Mnemonic::LAX, "*LAX", 2, 4, AddressingMode::ZeroPageY),
         OpCode::new(0xaf, Mnemonic::LAX, "*LAX", 3, 4, AddressingMode::Absolute),
