@@ -30,6 +30,8 @@ extern crate lazy_static;
 extern crate bitflags;
 
 fn main() {
+    let path = std::env::args().nth(1).expect("no path given");
+
     // init sdl2
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
@@ -48,7 +50,7 @@ fn main() {
         .create_texture_target(PixelFormatEnum::RGB24, 256, 240)
         .unwrap();
 
-    let game_code = fs::read("./roms/super.nes").expect("Should have been able to read the game");
+    let game_code = fs::read(path).expect("Should have been able to read the game");
     let rom = Rom::new(&game_code).unwrap();
 
     let mut frame = Frame::new();
@@ -71,7 +73,7 @@ fn main() {
 
         canvas.copy(&texture, None, None).unwrap();
 
-        render_tile_borders(&mut canvas);
+        // render_tile_borders(&mut canvas);
 
         canvas.present();
 

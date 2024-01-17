@@ -12,3 +12,7 @@ target/
 .DS_STORE
 
 *.nes
+*.log
+
+roms/
+tests/
