@@ -228,15 +228,13 @@ impl<'a> CPU<'a> {
             .wrapping_add(1)
             .wrapping_add(offset as u16);
 
-        let initial_high_byte = (self.program_counter.wrapping_add(1) >> 8) as u8;
-        let target_high_byte = (jump_addr >> 8) as u8;
-
-        self.program_counter = jump_addr;
-
         self.cycles += 1;
-        if initial_high_byte != target_high_byte {
+        if page_cross(self.program_counter, jump_addr) {
             self.cycles += 1;
         }
+
+        self.program_counter = jump_addr;
+        self.pc_updated = true;
     }
 
     fn bcc(&mut self) {
@@ -296,14 +294,16 @@ impl<'a> CPU<'a> {
         self.set_flag(OVERFLOW_FLAG, (value & 0x40) != 0);
     }
 
-    // fn brk(&mut self) {
-    //     self.push_stack16(self.program_counter);
-    //     self.push_stack(self.stack_pointer);
+    fn brk(&mut self) {
+        self.push_stack16(self.program_counter.wrapping_add(1));
 
-    //     self.program_counter = self.bus.mem_read_u16(BRK_VECTOR);
+        let status = self.processor_status | 0x10;
+        self.push_stack(status);
 
-    //     self.set_flag(BREAK_FLAG, true);
-    // }
+        self.set_flag(IRQ_FLAG, true);
+
+        self.program_counter = self.bus.mem_read_u16(0xFFFE);
+    }
 
     fn clc(&mut self) {
         self.set_flag(CARRY_FLAG, false);
@@ -405,6 +405,7 @@ impl<'a> CPU<'a> {
     fn jmp(&mut self, mode: &AddressingMode) {
         let (addr, _) = self.get_operand_address(&mode);
         self.program_counter = addr;
+        self.pc_updated = true;
     }
 
     fn jsr(&mut self, mode: &AddressingMode) {
@@ -412,6 +413,7 @@ impl<'a> CPU<'a> {
         self.push_stack16(self.program_counter + 2 - 1);
 
         self.program_counter = addr;
+        self.pc_updated = true;
     }
 
     fn lda(&mut self, mode: &AddressingMode) {
@@ -580,10 +582,13 @@ impl<'a> CPU<'a> {
         self.set_flags(value);
 
         self.program_counter = self.pop_stack16();
+        self.pc_updated = true;
     }
 
     fn rts(&mut self) {
+        self.bus.mem_read(self.program_counter);
         self.program_counter = self.pop_stack16().wrapping_add(1);
+        self.pc_updated = true;
     }
 
     fn sbc(&mut self, mode: &AddressingMode) {
@@ -729,6 +734,22 @@ impl<'a> CPU<'a> {
         self.set_zero_and_negative_flags(self.register_x);
     }
 
+    fn las(&mut self, mode: &AddressingMode) {
+        let (addr, page_cross) = self.get_operand_address(&mode);
+        let value = self.bus.mem_read(addr);
+
+        let result = self.stack_pointer & value;
+        self.register_a = result;
+        self.register_x = result;
+        self.stack_pointer = result;
+
+        self.set_zero_and_negative_flags(result);
+
+        if page_cross {
+            self.cycles += 1;
+        }
+    }
+
     fn lax(&mut self, mode: &AddressingMode) {
         let (addr, page_cross) = self.get_operand_address(&mode);
         let value = self.bus.mem_read(addr);
@@ -825,22 +846,28 @@ impl<'a> CPU<'a> {
         self.set_zero_and_negative_flags(self.register_a);
     }
 
-    fn shx(&mut self) {
-        let (addr, _) = self.get_operand_address(&AddressingMode::Absolute);
+    fn shx(&mut self, mode: &AddressingMode) {
+        let (addr, page_cross) = self.get_operand_address(&mode);
 
         let hi = (addr >> 8) as u8;
-        let result = self.register_x & hi.wrapping_add(1);
 
-        self.bus.mem_write(addr, result);
+        let result = self.register_x & hi.wrapping_add(!page_cross as u8);
+        let high = if page_cross { result } else { hi };
+
+        self.bus
+            .mem_write(addr & 0x00FF | (high as u16) << 8, result);
     }
 
-    fn shy(&mut self) {
-        let (addr, _) = self.get_operand_address(&AddressingMode::Absolute);
+    fn shy(&mut self, mode: &AddressingMode) {
+        let (addr, page_cross) = self.get_operand_address(&mode);
 
         let hi = (addr >> 8) as u8;
-        let result = self.register_y & hi.wrapping_add(1);
 
-        self.bus.mem_write(addr, result);
+        let result = self.register_y & hi.wrapping_add(!page_cross as u8);
+        let high = if page_cross { result } else { hi };
+
+        self.bus
+            .mem_write(addr & 0x00FF | (high as u16) << 8, result);
     }
 
     fn sre(&mut self, mode: &AddressingMode) {
@@ -945,6 +972,7 @@ impl<'a> CPU<'a> {
         self.register_y = 0;
         self.processor_status = 0b100100;
         self.stack_pointer = STACK_RESET;
+        self.cycles = 0;
 
         self.program_counter = self.bus.mem_read_u16(0xFFFC);
     }
@@ -956,9 +984,10 @@ impl<'a> CPU<'a> {
                 self.interrupt_nmi();
             }
 
+            callback(self);
+
             let code = self.bus.mem_read(self.program_counter);
             self.program_counter = self.program_counter.wrapping_add(1);
-            let program_counter_state = self.program_counter;
 
             let opcode = OPCODES_MAP
                 .get(&code)
@@ -977,7 +1006,7 @@ impl<'a> CPU<'a> {
                 Mnemonic::BVC => self.bvc(),
                 Mnemonic::BVS => self.bvs(),
                 Mnemonic::BIT => self.bit(&opcode.mode),
-                Mnemonic::BRK => return,
+                Mnemonic::BRK => self.brk(),
                 Mnemonic::CLC => self.clc(),
                 Mnemonic::CLD => self.cld(),
                 Mnemonic::CLI => self.cli(),
@@ -1026,23 +1055,25 @@ impl<'a> CPU<'a> {
                 Mnemonic::ARR => self.arr(&opcode.mode),
                 Mnemonic::ANC => self.anc(&opcode.mode),
                 Mnemonic::AXS => self.axs(&opcode.mode),
+                Mnemonic::LAS => self.las(&opcode.mode),
                 Mnemonic::LAX => self.lax(&opcode.mode),
                 Mnemonic::SAX => self.sax(&opcode.mode),
                 Mnemonic::DCP => self.dcp(&opcode.mode),
                 Mnemonic::ISB => self.isb(&opcode.mode),
                 Mnemonic::SLO => self.slo(&opcode.mode),
                 Mnemonic::RLA => self.rla(&opcode.mode),
-                Mnemonic::SHX => self.shx(),
-                Mnemonic::SHY => self.shy(),
+                Mnemonic::SHX => self.shx(&opcode.mode),
+                Mnemonic::SHY => self.shy(&opcode.mode),
                 Mnemonic::SRE => self.sre(&opcode.mode),
                 Mnemonic::RRA => self.rra(&opcode.mode),
                 _ => todo!("{:?}", opcode.mnemonic),
             }
-            self.bus.tick(opcode.cycles);
 
-            if program_counter_state == self.program_counter {
-                self.program_counter += (opcode.len - 1) as u16;
+            if !self.pc_updated {
+                self.program_counter = self.program_counter.wrapping_add((opcode.len - 1) as u16);
             }
+
+            self.pc_updated = false;
 
             self.cycles += opcode.cycles as u64;
 
