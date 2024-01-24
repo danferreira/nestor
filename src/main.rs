@@ -35,13 +35,14 @@ fn main() {
     // init sdl2
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
+    let mut event_pump = sdl_context.event_pump().unwrap();
+
     let window = video_subsystem
         .window("NEStor", (256 * 3) as u32, (240 * 3) as u32)
         .position_centered()
         .build()
         .unwrap();
 
-    let mut event_pump = sdl_context.event_pump().unwrap();
     let mut canvas = window.into_canvas().present_vsync().build().unwrap();
     // canvas.set_scale(3.0, 3.0).unwrap();
 
@@ -49,11 +50,6 @@ fn main() {
     let mut texture = creator
         .create_texture_target(PixelFormatEnum::RGB24, 256, 240)
         .unwrap();
-
-    let game_code = fs::read(path).expect("Should have been able to read the game");
-    let rom = Rom::new(&game_code).unwrap();
-
-    let mut frame = Frame::new();
 
     let mut key_map = HashMap::new();
     key_map.insert(Keycode::Down, joypad::JoypadButton::DOWN);
@@ -64,6 +60,11 @@ fn main() {
     key_map.insert(Keycode::Return, joypad::JoypadButton::START);
     key_map.insert(Keycode::A, joypad::JoypadButton::BUTTON_A);
     key_map.insert(Keycode::S, joypad::JoypadButton::BUTTON_B);
+
+    let game_code = fs::read(path).expect("Should have been able to read the game");
+    let rom = Rom::new(&game_code).unwrap();
+
+    let mut frame = Frame::new(256 * 2, 240);
 
     // the game cycle
     let bus = Bus::new(rom, move |ppu: &NesPPU, joypad: &mut joypad::Joypad| {

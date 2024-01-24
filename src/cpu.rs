@@ -1,5 +1,9 @@
-use crate::bus::Bus;
-use crate::opcodes::{Mnemonic, OPCODES_MAP};
+use std::process;
+
+use crate::{
+    bus::Bus,
+    opcodes::{Mnemonic, OPCODES_MAP},
+};
 
 const CARRY_FLAG: u8 = 1 << 0;
 const ZERO_FLAG: u8 = 1 << 1;
@@ -22,6 +26,7 @@ pub struct CPU<'a> {
     pub program_counter: u16,
     pub bus: Bus<'a>,
     pub cycles: u64,
+    pc_updated: bool,
 }
 
 #[derive(Debug)]
@@ -37,6 +42,7 @@ pub enum AddressingMode {
     Indirect,
     IndirectX,
     IndirectY,
+    Relative,
     NoneAddressing,
 }
 
@@ -55,6 +61,7 @@ impl<'a> CPU<'a> {
             program_counter: 0,
             bus,
             cycles: 0,
+            pc_updated: false,
         }
     }
 
@@ -947,14 +954,11 @@ impl<'a> CPU<'a> {
 
     fn interrupt_nmi(&mut self) {
         self.push_stack16(self.program_counter);
+        self.php();
 
         self.cycles += 7;
-
-        self.push_stack(self.processor_status);
-
         self.set_flag(IRQ_FLAG, true);
 
-        self.bus.tick(2);
         self.program_counter = self.bus.mem_read_u16(0xFFFA);
     }
 
@@ -978,6 +982,13 @@ impl<'a> CPU<'a> {
     }
 
     pub fn run(&mut self) {
+        self.run_with_callback(|_| {});
+    }
+
+    pub fn run_with_callback<F>(&mut self, mut callback: F)
+    where
+        F: FnMut(&mut CPU),
+    {
         loop {
             let start_cycles = self.cycles;
             if self.bus.poll_nmi_status().is_some() {
@@ -1078,6 +1089,47 @@ impl<'a> CPU<'a> {
             self.cycles += opcode.cycles as u64;
 
             self.bus.tick((self.cycles - start_cycles) as u8);
+
+            // self.debug_tests();
+        }
+    }
+
+    // Reads a null-terminated string starting at `addr'
+    fn read_string(&mut self, addr: u16) -> String {
+        let mut addr = addr;
+
+        let mut rv = String::new();
+
+        loop {
+            let b = self.bus.mem_read(addr);
+
+            if b == 0 {
+                break;
+            }
+
+            rv.push(b as char);
+
+            addr += 1;
+        }
+
+        rv
+    }
+
+    fn debug_tests(&mut self) {
+        let a = self.bus.mem_read(0x6001);
+        let b = self.bus.mem_read(0x6002);
+        let c = self.bus.mem_read(0x6003);
+
+        if a == 0xDE && b == 0xB0 && c == 0x61 {
+            let result = self.bus.mem_read(0x6000);
+
+            if result <= 0x7F {
+                let result_string = self.read_string(0x6004);
+                println!("{}", result_string);
+
+                println!("Emulator test complete, final status: 0x{:02X}", result);
+                process::exit(0);
+            }
         }
     }
 }
