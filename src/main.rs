@@ -37,8 +37,11 @@ fn main() {
     let video_subsystem = sdl_context.video().unwrap();
     let mut event_pump = sdl_context.event_pump().unwrap();
 
+    let width = 256;
+    let height = 240;
+
     let window = video_subsystem
-        .window("NEStor", (256 * 3) as u32, (240 * 3) as u32)
+        .window("NEStor", width * 3 as u32, height * 3 as u32)
         .position_centered()
         .build()
         .unwrap();
@@ -48,7 +51,7 @@ fn main() {
 
     let creator = canvas.texture_creator();
     let mut texture = creator
-        .create_texture_target(PixelFormatEnum::RGB24, 256, 240)
+        .create_texture_target(PixelFormatEnum::RGB24, width, height)
         .unwrap();
 
     let mut key_map = HashMap::new();
@@ -64,13 +67,9 @@ fn main() {
     let game_code = fs::read(path).expect("Should have been able to read the game");
     let rom = Rom::new(&game_code).unwrap();
 
-    let mut frame = Frame::new(256 * 2, 240);
-
     // the game cycle
     let bus = Bus::new(rom, move |ppu: &NesPPU, joypad: &mut joypad::Joypad| {
-        render::render(ppu, &mut frame);
-
-        texture.update(None, &frame.data, 256 * 2 * 3).unwrap();
+        texture.update(None, &ppu.frame.data, 256 * 3).unwrap();
 
         canvas.copy(&texture, None, None).unwrap();
 
@@ -104,7 +103,9 @@ fn main() {
 
     let mut cpu = CPU::new(bus);
     cpu.reset();
-    cpu.run();
+    cpu.run_with_callback(|cpu| {
+        // println!("{}", trace::trace(cpu));
+    })
 }
 
 pub fn render_tile_borders(canvas: &mut Canvas<Window>) {
