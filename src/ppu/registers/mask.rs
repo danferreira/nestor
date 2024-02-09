@@ -55,6 +55,10 @@ impl MaskRegister {
         self.contains(MaskRegister::SHOW_SPRITES)
     }
 
+    pub fn rendering_enabled(&self) -> bool {
+        self.show_background() || self.show_sprites()
+    }
+
     pub fn emphasise(&self) -> Vec<Color> {
         let mut result = Vec::<Color>::new();
         if self.contains(MaskRegister::EMPHASISE_RED) {

@@ -28,15 +28,16 @@ impl<'call> Bus<'call> {
     }
 
     pub fn tick(&mut self, cycles: u8) {
-        let nmi_before = self.ppu.nmi_interrupt.is_some();
+        let mut frame_complete = false;
 
         for _ in 0..(cycles * 3) {
-            self.ppu.tick();
+            if self.ppu.tick() {
+                frame_complete = true;
+                break;
+            }
         }
 
-        let nmi_after = self.ppu.nmi_interrupt.is_some();
-
-        if !nmi_before && nmi_after {
+        if frame_complete {
             (self.gameloop_callback)(&self.ppu, &mut self.joypad1);
         }
     }

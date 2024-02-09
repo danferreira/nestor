@@ -11,15 +11,40 @@ use registers::scroll::ScrollRegister;
 use registers::status::StatusRegister;
 
 pub mod registers;
+
+const NAMETABLE_SIZE: usize = 0x400;
+const PALETTE_SIZE: usize = 0x20;
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+enum Scanline {
+    PreRender,
+    Visible,
+    PostRender,
+    VBlank,
+}
+
+impl Scanline {
+    pub fn from(scanline: usize) -> Self {
+        match scanline {
+            261 => Scanline::PreRender,
+            0..=239 => Scanline::Visible,
+            240 => Scanline::PostRender,
+            241..=260 => Scanline::VBlank,
+
+            _ => panic!("Invalid scanline!"),
+        }
+    }
+}
+
 pub struct NesPPU {
     pub rom: Rc<RefCell<Rom>>,
-    pub vram: [u8; 2048],
-    pub palette_table: [u8; 32],
+    pub vram: [u8; 2 * NAMETABLE_SIZE],
+    pub palette_table: [u8; PALETTE_SIZE],
     pub oam_data: [u8; 256],
     pub oam_addr: u8,
 
-    pub scanline: i16,
-    cycles: usize,
+    pub scanline: usize,
+    pub cycle: usize,
     frames: usize,
 
     pub mask: MaskRegister,
@@ -31,8 +56,10 @@ pub struct NesPPU {
     //internal registers
     v: u16,
     t: u16,
-    x: u8,
+    fine_x: u8,
     w: bool,
+
+    vram_buffer: u8,
 
     nametable_byte: u8,
     attribute_byte: u8,
@@ -47,12 +74,13 @@ pub struct NesPPU {
     bg_shifter_attrib_lo: u16,
     bg_shifter_attrib_hi: u16,
 
-    internal_data_buf: u8,
     pub nmi_interrupt: Option<u8>,
+
+    suppress_vbl: bool,
 
     // The last written value to any PPU register
     // For use when reading the PPUSTATUS
-    pub last_value: u8,
+    pub open_bus: u8,
 
     // Odd/even frame state
     odd_frame: bool,
@@ -64,11 +92,10 @@ impl NesPPU {
     pub fn new(rom: Rc<RefCell<Rom>>) -> Self {
         NesPPU {
             rom,
-            vram: [0; 2048],
+            vram: [0; 2 * NAMETABLE_SIZE],
             oam_data: [0; 64 * 4],
             oam_addr: 0,
-            palette_table: [0; 32],
-            internal_data_buf: 0,
+            palette_table: [0; PALETTE_SIZE],
 
             mask: MaskRegister::new(),
             ctrl: ControlRegister::new(),
@@ -78,8 +105,10 @@ impl NesPPU {
 
             v: 0,
             t: 0,
-            x: 0,
+            fine_x: 0,
             w: false,
+
+            vram_buffer: 0,
 
             nametable_byte: 0,
             attribute_byte: 0,
@@ -93,29 +122,18 @@ impl NesPPU {
             bg_shifter_attrib_hi: 0,
 
             scanline: 0,
-            cycles: 0,
+            cycle: 0,
             frames: 0,
+
             nmi_interrupt: None,
-            last_value: 0,
+            suppress_vbl: false,
+
+            open_bus: 0,
 
             odd_frame: false,
 
             frame: Frame::new(256, 240),
         }
-    }
-
-    fn write_to_ctrl(&mut self, value: u8) {
-        let before_nmi_status = self.ctrl.generate_vblank_nmi();
-        self.ctrl.update(value);
-        let updated_nmi_status = self.ctrl.generate_vblank_nmi();
-
-        if !before_nmi_status && updated_nmi_status && self.status.is_in_vblank() {
-            self.nmi_interrupt = Some(1)
-        }
-
-        // t: ...GH.. ........ <- d: ......GH
-        // <used elsewhere> <- d: ABCDEF..
-        self.t = (self.t & 0xF3FF) | ((value as u16 & 0x03) << 10)
     }
 
     fn write_to_mask(&mut self, value: u8) {
@@ -137,148 +155,10 @@ impl NesPPU {
         }
     }
 
-    fn read_status(&mut self) -> u8 {
-        let mut data = self.status.snapshot();
-
-        data &= !0x1f; // Clear the lower 5 bits
-        data |= self.last_value & 0x1f; // Set the lower 5 bits to the last value written to PPU
-
-        self.status.reset_vblank_status();
-        self.addr.reset_latch();
-        self.scroll.reset_latch();
-
-        // w:                  <- 0
-        self.w = false;
-
-        data
-    }
-
-    fn read_oam_data(&self) -> u8 {
-        self.oam_data[self.oam_addr as usize]
-    }
-
-    fn write_to_scroll(&mut self, value: u8) {
-        self.scroll.write(value);
-
-        if !self.w {
-            // t: ....... ...ABCDE <- d: ABCDE...
-            // x:              FGH <- d: .....FGH
-            // w:                  <- 1
-            self.t = (self.t & 0x7FE0) | value as u16 >> 3;
-            self.x = value & 0x07;
-            self.w = true;
-        } else {
-            // t: FGH..AB CDE..... <- d: ABCDEFGH
-            // w:                  <- 0
-            self.t |= ((value & 0x07) as u16) << 12;
-            self.t |= ((value & 0xF8) as u16) << 2;
-            self.w = false;
-        }
-    }
-
-    fn write_to_ppu_addr(&mut self, value: u8) {
-        self.addr.update(value);
-
-        if !self.w {
-            // t: .CDEFGH ........ <- d: ..CDEFGH
-            //        <unused>     <- d: AB......
-            // t: Z...... ........ <- 0 (bit Z is cleared)
-            // w:                  <- 1
-            // ..FEDCBA ........
-            self.t = (self.t & 0x00FF) | ((value & 0x3F) as u16) << 8;
-            self.w = true;
-        } else {
-            // t: ....... ABCDEFGH <- d: ABCDEFGH
-            // v: <...all bits...> <- t: <...all bits...>
-            // w:                  <- 0
-            self.t = (self.t & 0xFF00) | value as u16;
-            self.v = self.t;
-            self.w = false;
-        }
-    }
-
     fn increment_vram_addr(&mut self) {
         self.addr.increment(self.ctrl.vram_addr_increment());
 
         self.v = self.v.wrapping_add(self.ctrl.vram_addr_increment() as u16);
-    }
-
-    fn read_data(&mut self) -> u8 {
-        let addr = self.addr.get();
-        self.increment_vram_addr();
-
-        match addr {
-            0..=0x1fff => {
-                let result = self.internal_data_buf;
-                self.internal_data_buf = self.rom.borrow().mapper.read(addr);
-                result
-            }
-            0x2000..=0x2fff => {
-                let result = self.internal_data_buf;
-                self.internal_data_buf = self.vram[self.mirror_vram_addr(addr) as usize];
-                result
-            }
-            0x3000..=0x3eff => panic!(
-                "addr space 0x3000..0x3eff is not expected to be used, requested = {} ",
-                addr
-            ),
-            0x3f10 | 0x3f14 | 0x3f18 | 0x3f1c => {
-                let add_mirror = addr - 0x10;
-                self.palette_table[(add_mirror - 0x3f00) as usize]
-            }
-
-            0x3f00..=0x3fff => self.palette_table[(addr - 0x3f00) as usize],
-            _ => panic!("unexpected access to mirrored space {}", addr),
-        }
-    }
-
-    fn write_to_data(&mut self, value: u8) {
-        let addr = self.addr.get();
-
-        match addr {
-            0..=0x1fff => self.rom.borrow_mut().mapper.write(addr, value),
-            0x2000..=0x2fff => {
-                self.vram[self.mirror_vram_addr(addr) as usize] = value;
-            }
-            0x3000..=0x3eff => unimplemented!("addr {} shouldn't be used in reallity", addr),
-
-            //Addresses $3F10/$3F14/$3F18/$3F1C are mirrors of $3F00/$3F04/$3F08/$3F0C
-            0x3f10 | 0x3f14 | 0x3f18 | 0x3f1c => {
-                let add_mirror = addr - 0x10;
-                self.palette_table[(add_mirror - 0x3f00) as usize] = value;
-            }
-            0x3f00..=0x3fff => {
-                let mut i = addr as usize % 0x20;
-
-                match i & 0x00ff {
-                    // Addresses $3F10/$3F14/$3F18/$3F1C are mirrors of
-                    // $3F00/$3F04/$3F08/$3F0C
-                    0x10 | 0x14 | 0x18 | 0x1c => {
-                        i &= 0xff0f;
-                    }
-                    _ => {}
-                }
-
-                self.palette_table[i] = value;
-                // self.palette_table[(addr - 0x3f00) as usize] = value;
-            }
-            _ => panic!("unexpected access to mirrored space {}", addr),
-        }
-        self.increment_vram_addr();
-    }
-
-    fn mirror_vram_addr(&self, addr: u16) -> u16 {
-        let mirrored_vram = addr & 0b10111111111111; // mirror down 0x3000-0x3eff to 0x2000 - 0x2eff
-
-        let vram_index = mirrored_vram - 0x2000; // to vram vector
-        let name_table = vram_index / 0x400; // to the name table index
-        match (&self.rom.borrow().mirroring, name_table) {
-            (Mirroring::Vertical, 2) | (Mirroring::Vertical, 3) => vram_index - 0x800,
-            (Mirroring::Horizontal, 2) => vram_index - 0x400,
-            (Mirroring::Horizontal, 1) => vram_index - 0x400,
-            (Mirroring::Horizontal, 3) => vram_index - 0x800,
-            _ => vram_index,
-        }
     }
 
     fn is_sprite_0_hit(&self, cycle: usize) -> bool {
@@ -354,6 +234,8 @@ impl NesPPU {
         }
     }
 
+    // https://wiki.nesdev.com/w/index.php/PPU_scrolling#Tile_and_attribute_fetching
+    // the index of the tile from the pattern table
     fn fetch_nametable_byte(&mut self) -> u8 {
         let addr = 0x2000 | (self.v & 0x0FFF);
         self.mem_read(addr)
@@ -411,7 +293,7 @@ impl NesPPU {
         }
     }
 
-    fn update_shifters(&mut self) {
+    fn update_shift_registers(&mut self) {
         if self.mask.show_background() {
             // Shifting background tile pattern row
             self.bg_shifter_pattern_lo <<= 1;
@@ -424,98 +306,93 @@ impl NesPPU {
     }
 
     pub fn tick(&mut self) -> bool {
-        let rendering_enabled = self.mask.show_background() || self.mask.show_sprites();
-        let pre_render_scanline = self.scanline == -1 || self.scanline == 261;
-        let visible_scanline = self.scanline >= 0 && self.scanline <= 239;
-        let render_line = pre_render_scanline || visible_scanline;
-        let visible_cycles = self.cycles >= 1 && self.cycles <= 256;
-        let next_cycles = self.cycles >= 321 && self.cycles <= 336;
+        let scanline_step = Scanline::from(self.scanline as usize);
 
-        if pre_render_scanline {
-            if self.cycles == 1 {
-                self.status.reset_vblank_status();
-                self.status.set_sprite_zero_hit(false);
-                self.status.set_sprite_overflow(false);
+        match (scanline_step, self.cycle) {
+            (_, 0) => {
+                //  idle cycle
             }
+            (Scanline::Visible, 1..=256) => {
+                self.update_shift_registers();
+                self.fetch_internal_registers();
 
-            if self.cycles >= 280 && self.cycles <= 304 {
-                self.transfer_y()
-            }
-        }
-
-        if self.scanline == 0 && self.cycles == 0 {
-            self.frame = Frame::new(256, 240);
-            self.cycles = 1;
-            return false;
-        }
-
-        if visible_scanline && visible_cycles {
-            self.render_pixel();
-        }
-
-        if render_line && (visible_cycles || next_cycles) {
-            self.update_shifters();
-            match (self.cycles - 1) % 8 {
-                0 => {
-                    self.nametable_byte = self.fetch_nametable_byte();
+                if self.cycle == 256 {
+                    self.increment_y();
                 }
-                2 => {
-                    self.attribute_byte = self.fetch_attribute_table_byte();
-                }
-                4 => {
-                    self.bg_tile_lo = self.fetch_bg_tile_lo();
-                }
-                6 => {
-                    self.bg_tile_hi = self.fetch_bg_tile_high();
-                }
-                7 => {
-                    self.load_shift_registers();
-                    self.increment_x();
-                }
-                _ => (),
-            }
-        }
 
-        if render_line {
-            if self.cycles == 256 {
-                self.increment_y();
+                self.render_pixel();
+            }
+            (Scanline::Visible, 257) => self.transfer_x(),
+            (Scanline::Visible, 321..=336) => {
+                self.update_shift_registers();
+                self.fetch_internal_registers()
+            }
+            (Scanline::Visible, 337 | 339) => {
+                // Unused NT fetches
+                self.fetch_nametable_byte();
+            }
+            (Scanline::PostRender, _) => {
+                //Idle. Do nothing
+            }
+            (Scanline::VBlank, 1) => {
+                if self.scanline == 241 {
+                    if !self.suppress_vbl {
+                        self.status.set_vblank_status(true);
+                        if self.ctrl.generate_vblank_nmi() {
+                            self.nmi_interrupt = Some(1);
+                        }
+                    }
+                }
+            }
+            (Scanline::PreRender, 1..=256) => {
+                if self.cycle == 1 {
+                    self.status.reset_vblank_status();
+                    self.status.set_sprite_zero_hit(false);
+                    self.status.set_sprite_overflow(false);
+                    self.nmi_interrupt = None;
+                    self.suppress_vbl = false;
+                }
+
+                self.fetch_internal_registers();
+
+                if self.cycle == 256 {
+                    self.increment_y();
+                }
             }
 
-            if self.cycles == 257 {
-                self.transfer_x();
+            (Scanline::PreRender, 257) => self.transfer_x(),
+            (Scanline::PreRender, 280..=304) => self.transfer_y(),
+            (Scanline::PreRender, 321..=336) => {
+                self.update_shift_registers();
+                self.fetch_internal_registers()
             }
-        }
+            (Scanline::PreRender, 337) => {
+                self.fetch_nametable_byte();
+            }
+            (Scanline::PreRender, 339) => {
+                self.fetch_nametable_byte();
 
-        if self.scanline == 241 && self.cycles == 1 {
-            self.status.set_vblank_status(true);
-            if self.ctrl.generate_vblank_nmi() {
-                self.nmi_interrupt = Some(1);
+                // The "Skipped on BG+odd" tick is implemented by jumping directly
+                // from (339, 261) to (0, 0), meaning the last tick of the last NT
+                // fetch takes place at (0, 0) on odd frames replacing the idle tick
+                if self.mask.rendering_enabled() && self.odd_frame {
+                    self.cycle = 340;
+                }
             }
-        }
-
-        if rendering_enabled {
-            if self.odd_frame && self.scanline == 261 && self.cycles == 339 {
-                self.cycles = 0;
-                self.scanline = -1;
-                self.odd_frame = false;
-                return false;
-            }
+            _ => (),
         }
 
         // cycle:    0 - 340
         // scanline: 0 - 261
-        self.cycles += 1;
-        if self.cycles >= 341 {
-            self.cycles = 0;
+        self.cycle += 1;
+        if self.cycle > 340 {
+            self.cycle = 0;
             self.scanline += 1;
 
-            if self.scanline >= 261 {
-                self.status.reset_vblank_status();
-                self.status.set_sprite_zero_hit(false);
-                self.nmi_interrupt = None;
-                self.scanline = -1;
+            if self.scanline > 261 {
+                self.scanline = 0;
                 self.odd_frame = !self.odd_frame;
-                self.frames += 1;
+
                 return true;
             }
         }
@@ -523,12 +400,33 @@ impl NesPPU {
         return false;
     }
 
+    fn fetch_internal_registers(&mut self) {
+        match self.cycle % 8 {
+            1 => {
+                self.load_shift_registers();
+                self.nametable_byte = self.fetch_nametable_byte();
+            }
+            3 => {
+                self.attribute_byte = self.fetch_attribute_table_byte();
+            }
+            5 => {
+                self.bg_tile_lo = self.fetch_bg_tile_lo();
+            }
+            7 => {
+                self.bg_tile_hi = self.fetch_bg_tile_high();
+            }
+            0 => self.increment_x(),
+            _ => (),
+        }
+    }
+
     fn render_pixel(&mut self) {
         let mut bg_pixel = 0x00; // The 2-bit pixel to be rendered
         let mut bg_palette = 0x00; // The 3-bit index of the palette the pixel indexes
-        if self.mask.show_background() {
+
+        if self.mask.show_background() || self.mask.show_sprites() {
             //get the bit value from the pattern shift registers
-            let bit_mux = 0x8000 >> self.x;
+            let bit_mux = 0x8000 >> self.fine_x;
 
             // fetch the pattern bits
             let p0_pixel = (self.bg_shifter_pattern_lo & bit_mux) > 0;
@@ -536,6 +434,8 @@ impl NesPPU {
 
             //combine the pattern bits
             bg_pixel = (p1_pixel as u8) << 1 | (p0_pixel as u8);
+
+            // println!("({}, {}) {}", self.cycle, self.scanline, bg_pixel);
 
             // fetch the palette bits
             let palette0_pixel = (self.bg_shifter_attrib_lo & bit_mux) > 0;
@@ -548,13 +448,8 @@ impl NesPPU {
         let color = self.fetch_color_from_palette(bg_palette, bg_pixel);
         let rgb = palette::SYSTEM_PALETTE[color as usize];
 
-        // if self.cycles >= 0 {
-        println!("cycles: {} scanline: {}", self.cycles, self.scanline);
-        if self.cycles > 0 && self.scanline >= 0 {
-            self.frame
-                .set_pixel(self.cycles - 1, self.scanline as usize, rgb);
-        }
-        // }
+        self.frame
+            .set_pixel(self.cycle - 1, self.scanline as usize, rgb);
     }
 
     fn fetch_color_from_palette(&self, palette: u8, pixel: u8) -> u8 {
@@ -566,32 +461,88 @@ impl NesPPU {
         self.nmi_interrupt.take()
     }
 
+    fn mirror_nametable(&self, addr: u16) -> u16 {
+        let mirrored_vram = addr & 0x0FFF;
+        let nametable_index = mirrored_vram / 0x400;
+        match (&self.rom.borrow().mirroring, nametable_index) {
+            (Mirroring::Vertical, 2) | (Mirroring::Vertical, 3) => mirrored_vram - 0x800,
+            (Mirroring::Horizontal, 1) | (Mirroring::Horizontal, 2) => mirrored_vram - 0x400,
+            (Mirroring::Horizontal, 3) => mirrored_vram - 0x800,
+            _ => mirrored_vram,
+        }
+    }
+
+    fn mirror_palette(&self, address: u16) -> usize {
+        let address = (address as usize) % 0x20;
+
+        match address {
+            0x10 | 0x14 | 0x18 | 0x1C => address - 0x10,
+            _ => address,
+        }
+    }
+
     fn mem_read(&self, address: u16) -> u8 {
         match address {
             0..=0x1fff => self.rom.borrow().mapper.read(address),
-            0x2000..=0x2fff => self.vram[self.mirror_vram_addr(address) as usize],
-            0x3000..=0x3eff => panic!(
-                "addr space 0x3000..0x3eff is not expected to be used, requested = {} ",
-                address
-            ),
-            0x3f10 | 0x3f14 | 0x3f18 | 0x3f1c => {
-                let add_mirror = address - 0x10;
-                self.palette_table[(add_mirror - 0x3f00) as usize]
-            }
+            0x2000..=0x3eff => self.vram[self.mirror_nametable(address) as usize],
+            0x3f00..=0x3fff => self.palette_table[self.mirror_palette(address)],
+            _ => panic!("unexpected access to mirrored space {}", address),
+        }
+    }
 
-            0x3f00..=0x3fff => self.palette_table[(address - 0x3f00) as usize],
+    fn mem_write(&mut self, address: u16, data: u8) {
+        match address {
+            0..=0x1fff => self.rom.borrow_mut().mapper.write(address, data),
+            0x2000..=0x2fff => self.vram[self.mirror_nametable(address) as usize] = data,
+            0x3000..=0x3eff => {
+                unimplemented!("address {} shouldn't be used in reallity", address)
+            }
+            0x3f00..=0x3fff => self.palette_table[self.mirror_palette(address)] = data,
             _ => panic!("unexpected access to mirrored space {}", address),
         }
     }
 
     pub fn cpu_read(&mut self, address: u16) -> u8 {
         match address {
-            0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 | 0x4014 => self.last_value,
-            0x2002 => self.read_status(),
-            0x2004 => self.read_oam_data(),
-            0x2007 => self.read_data(),
+            0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 | 0x4014 => self.open_bus,
+            0x2002 => {
+                let mut data = self.status.snapshot();
+
+                data &= 0xE0; // Clear the lower 5 bits
+                data |= self.open_bus & 0x1f; // Set the lower 5 bits to the last value written to PPU
+
+                self.status.reset_vblank_status();
+                self.scroll.reset_latch();
+                self.addr.reset_latch();
+
+                // w:                  <- 0
+                self.w = false;
+
+                if self.scanline == 241 && self.cycle == 0 {
+                    self.suppress_vbl = true;
+                }
+
+                self.open_bus |= data & 0xE0;
+                data
+            }
+            0x2004 => self.oam_data[self.oam_addr as usize],
+            0x2007 => {
+                // let addr = self.addr.get();
+                let address = self.v & 0x3fff;
+                self.increment_vram_addr();
+
+                // TODO: Verify behavior
+                if address >= 0x3F00 {
+                    self.vram_buffer = self.vram[self.mirror_nametable(address) as usize];
+                    self.mem_read(address)
+                } else {
+                    let result = self.vram_buffer;
+                    self.vram_buffer = self.mem_read(address);
+                    result
+                }
+            }
             0x2008..=0x3FFF => {
-                let mirror_down_addr = address & 0b00100000_00000111;
+                let mirror_down_addr = address & 0x2007;
                 self.cpu_read(mirror_down_addr)
             }
             _ => {
@@ -602,15 +553,26 @@ impl NesPPU {
     }
 
     pub fn cpu_write(&mut self, address: u16, data: u8) {
-        self.last_value = data;
+        self.open_bus = data;
+
         match address {
             0x2000 => {
-                self.write_to_ctrl(data);
+                let before_nmi_status = self.ctrl.generate_vblank_nmi();
+                self.ctrl.update(data);
+                // t: ...GH.. ........ <- d: ......GH
+                // <used elsewhere> <- d: ABCDEF..
+                self.t = (self.t & 0xF3FF) | ((data as u16 & 0x03) << 10);
+
+                let updated_nmi_status = self.ctrl.generate_vblank_nmi();
+
+                if !before_nmi_status && updated_nmi_status && self.status.is_in_vblank() {
+                    self.nmi_interrupt = Some(1)
+                }
             }
             0x2001 => {
                 self.write_to_mask(data);
             }
-            0x2002 => panic!("attempt to write to PPU status register"),
+            0x2002 => (),
 
             0x2003 => {
                 self.write_to_oam_addr(data);
@@ -619,14 +581,50 @@ impl NesPPU {
                 self.write_to_oam_data(data);
             }
             0x2005 => {
-                self.write_to_scroll(data);
+                self.scroll.write(data);
+
+                if !self.w {
+                    // t: ....... ...ABCDE <- d: ABCDE...
+                    // x:              FGH <- d: .....FGH
+                    // w:                  <- 1
+                    self.t = (self.t & 0x7FE0) | data as u16 >> 3;
+                    self.fine_x = data & 0x07;
+                    self.w = true;
+                } else {
+                    // t: FGH..AB CDE..... <- d: ABCDEFGH
+                    // w:                  <- 0
+                    self.t |= ((data & 0x07) as u16) << 12;
+                    self.t |= ((data & 0xF8) as u16) << 2;
+                    self.w = false;
+                }
             }
 
             0x2006 => {
-                self.write_to_ppu_addr(data);
+                self.addr.update(data);
+
+                if !self.w {
+                    // t: .CDEFGH ........ <- d: ..CDEFGH
+                    //        <unused>     <- d: AB......
+                    // t: Z...... ........ <- 0 (bit Z is cleared)
+                    // w:                  <- 1
+                    // ..FEDCBA ........
+                    self.t = (self.t & 0x00FF) | ((data & 0x3F) as u16) << 8;
+                    self.w = true;
+                } else {
+                    // t: ....... ABCDEFGH <- d: ABCDEFGH
+                    // v: <...all bits...> <- t: <...all bits...>
+                    // w:                  <- 0
+                    self.t = (self.t & 0xFF00) | data as u16;
+                    self.v = self.t;
+                    self.w = false;
+                }
             }
             0x2007 => {
-                self.write_to_data(data);
+                // let addr = self.addr.get();
+                let address = self.v & 0x3fff;
+
+                self.mem_write(address, data);
+                self.increment_vram_addr();
             }
             0x2008..=0x3FFF => {
                 let mirror_down_addr = address & 0b00100000_00000111;
@@ -643,7 +641,7 @@ impl NesPPU {
                 self.write_oam_dma(&buffer);
 
                 // todo: handle this eventually
-                // let add_cycles: u16 = if self.cycles % 2 == 1 { 514 } else { 513 };
+                // let add_cycles: u16 = if self.cycle % 2 == 1 { 514 } else { 513 };
                 // self.tick(add_cycles); //todo this will cause weird effects as PPU will have 513/514 * 3 ticks
             }
             _ => {
