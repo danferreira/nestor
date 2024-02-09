@@ -9,6 +9,7 @@ pub enum Mirroring {
     Vertical,
     Horizontal,
     FourScreen,
+    None,
 }
 
 pub struct Rom {
@@ -66,9 +67,11 @@ impl Rom {
 
         let mapper: Box<dyn Mapper> = match mapper_idx {
             0 => Box::new(Mapper0::new(prg_rom.clone(), chr_rom.clone())),
-            3 => Box::new(Mapper3::new(prg_rom.clone(), chr_rom.clone())),
+            // 3 => Box::new(Mapper3::new(prg_rom.clone(), chr_rom.clone())),
             _ => panic!("Mapper not implement yet {mapper_idx}"),
         };
+
+        // println!("Mirroring: {:?}", mirroring);
 
         Ok(Rom {
             prg_rom,

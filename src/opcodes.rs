@@ -113,7 +113,7 @@ impl OpCode {
 lazy_static! {
     pub static ref CPU_OPS_CODES: Vec<OpCode> = vec![
         OpCode::new(0x00, Mnemonic::BRK, "BRK", 1, 7, AddressingMode::NoneAddressing),
-        OpCode::new(0xea, Mnemonic::NOP, "NOP", 1, 2, AddressingMode::NoneAddressing),
+        OpCode::new(0xea, Mnemonic::NOP, "NOP", 1, 2, AddressingMode::Implied),
 
         /* Arithmetic */
         OpCode::new(0x69, Mnemonic::ADC, "ADC", 2, 2, AddressingMode::Immediate),
@@ -343,7 +343,7 @@ lazy_static! {
         OpCode::new(0x53, Mnemonic::SRE, "*SRE", 2, 8, AddressingMode::IndirectY),
 
 
-        OpCode::new(0x80, Mnemonic::NOP, "NOP", 2,2, AddressingMode::Immediate),
+        OpCode::new(0x80, Mnemonic::NOP, "*NOP", 2,2, AddressingMode::Immediate),
         OpCode::new(0x82, Mnemonic::NOP, "NOP", 2,2, AddressingMode::Immediate),
         OpCode::new(0x89, Mnemonic::NOP, "NOP", 2,2, AddressingMode::Immediate),
         OpCode::new(0xc2, Mnemonic::NOP, "NOP", 2,2, AddressingMode::Immediate),
@@ -362,22 +362,22 @@ lazy_static! {
         OpCode::new(0x4b, Mnemonic::ALR, "*ALR", 2,2, AddressingMode::Immediate),
         // OpCode::new(0xCB, Mnemonic::IGN, "*IGN", 3,4 /* or 5*/, AddressingMode::AbsoluteX),
 
-        OpCode::new(0x04, Mnemonic::NOP, "NOP", 2,3, AddressingMode::ZeroPage),
-        OpCode::new(0x44, Mnemonic::NOP, "NOP", 2,3, AddressingMode::ZeroPage),
-        OpCode::new(0x64, Mnemonic::NOP, "NOP", 2,3, AddressingMode::ZeroPage),
-        OpCode::new(0x14, Mnemonic::NOP, "NOP", 2, 4, AddressingMode::ZeroPageX),
-        OpCode::new(0x34, Mnemonic::NOP, "NOP", 2, 4, AddressingMode::ZeroPageX),
-        OpCode::new(0x54, Mnemonic::NOP, "NOP", 2, 4, AddressingMode::ZeroPageX),
-        OpCode::new(0x74, Mnemonic::NOP, "NOP", 2, 4, AddressingMode::ZeroPageX),
-        OpCode::new(0xd4, Mnemonic::NOP, "NOP", 2, 4, AddressingMode::ZeroPageX),
-        OpCode::new(0xf4, Mnemonic::NOP, "NOP", 2, 4, AddressingMode::ZeroPageX),
-        OpCode::new(0x0c, Mnemonic::NOP, "NOP", 3, 4, AddressingMode::Absolute),
-        OpCode::new(0x1c, Mnemonic::NOP, "NOP", 3, 4 /*or 5*/, AddressingMode::AbsoluteX),
-        OpCode::new(0x3c, Mnemonic::NOP, "NOP", 3, 4 /*or 5*/, AddressingMode::AbsoluteX),
-        OpCode::new(0x5c, Mnemonic::NOP, "NOP", 3, 4 /*or 5*/, AddressingMode::AbsoluteX),
-        OpCode::new(0x7c, Mnemonic::NOP, "NOP", 3, 4 /*or 5*/, AddressingMode::AbsoluteX),
-        OpCode::new(0xdc, Mnemonic::NOP, "NOP", 3, 4 /* or 5*/, AddressingMode::AbsoluteX),
-        OpCode::new(0xfc, Mnemonic::NOP, "NOP", 3, 4 /* or 5*/, AddressingMode::AbsoluteX),
+        OpCode::new(0x04, Mnemonic::NOP, "*NOP", 2,3, AddressingMode::ZeroPage),
+        OpCode::new(0x44, Mnemonic::NOP, "*NOP", 2,3, AddressingMode::ZeroPage),
+        OpCode::new(0x64, Mnemonic::NOP, "*NOP", 2,3, AddressingMode::ZeroPage),
+        OpCode::new(0x14, Mnemonic::NOP, "*NOP", 2, 4, AddressingMode::ZeroPageX),
+        OpCode::new(0x34, Mnemonic::NOP, "*NOP", 2, 4, AddressingMode::ZeroPageX),
+        OpCode::new(0x54, Mnemonic::NOP, "*NOP", 2, 4, AddressingMode::ZeroPageX),
+        OpCode::new(0x74, Mnemonic::NOP, "*NOP", 2, 4, AddressingMode::ZeroPageX),
+        OpCode::new(0xd4, Mnemonic::NOP, "*NOP", 2, 4, AddressingMode::ZeroPageX),
+        OpCode::new(0xf4, Mnemonic::NOP, "*NOP", 2, 4, AddressingMode::ZeroPageX),
+        OpCode::new(0x0c, Mnemonic::NOP, "*NOP", 3, 4, AddressingMode::Absolute),
+        OpCode::new(0x1c, Mnemonic::NOP, "*NOP", 3, 4 /*or 5*/, AddressingMode::AbsoluteX),
+        OpCode::new(0x3c, Mnemonic::NOP, "*NOP", 3, 4 /*or 5*/, AddressingMode::AbsoluteX),
+        OpCode::new(0x5c, Mnemonic::NOP, "*NOP", 3, 4 /*or 5*/, AddressingMode::AbsoluteX),
+        OpCode::new(0x7c, Mnemonic::NOP, "*NOP", 3, 4 /*or 5*/, AddressingMode::AbsoluteX),
+        OpCode::new(0xdc, Mnemonic::NOP, "*NOP", 3, 4 /* or 5*/, AddressingMode::AbsoluteX),
+        OpCode::new(0xfc, Mnemonic::NOP, "*NOP", 3, 4 /* or 5*/, AddressingMode::AbsoluteX),
 
         OpCode::new(0x67, Mnemonic::RRA, "*RRA", 2, 5, AddressingMode::ZeroPage),
         OpCode::new(0x77, Mnemonic::RRA, "*RRA", 2, 6, AddressingMode::ZeroPageX),
@@ -409,13 +409,13 @@ lazy_static! {
         OpCode::new(0xd2, Mnemonic::JAM, "JAM", 1,2, AddressingMode::NoneAddressing),
         OpCode::new(0xf2, Mnemonic::JAM, "JAM", 1,2, AddressingMode::NoneAddressing),
 
-        OpCode::new(0x1a, Mnemonic::NOP, "NOP", 1,2, AddressingMode::NoneAddressing),
-        OpCode::new(0x3a, Mnemonic::NOP, "NOP", 1,2, AddressingMode::NoneAddressing),
-        OpCode::new(0x5a, Mnemonic::NOP, "NOP", 1,2, AddressingMode::NoneAddressing),
-        OpCode::new(0x7a, Mnemonic::NOP, "NOP", 1,2, AddressingMode::NoneAddressing),
-        OpCode::new(0xda, Mnemonic::NOP, "NOP", 1,2, AddressingMode::NoneAddressing),
-        // OpCode::new(0xea, Mnemonic::NOP, "NOP", 1,2, AddressingMode::NoneAddressing),
-        OpCode::new(0xfa, Mnemonic::NOP, "NOP", 1,2, AddressingMode::NoneAddressing),
+        OpCode::new(0x1a, Mnemonic::NOP, "*NOP", 1,2, AddressingMode::Implied),
+        OpCode::new(0x3a, Mnemonic::NOP, "*NOP", 1,2, AddressingMode::Implied),
+        OpCode::new(0x5a, Mnemonic::NOP, "*NOP", 1,2, AddressingMode::Implied),
+        OpCode::new(0x7a, Mnemonic::NOP, "*NOP", 1,2, AddressingMode::Implied),
+        OpCode::new(0xda, Mnemonic::NOP, "*NOP", 1,2, AddressingMode::Implied),
+        // OpCode::new(0xea, Mnemonic::NOP, "NOP", 1,2, AddressingMode::Implied),
+        OpCode::new(0xfa, Mnemonic::NOP, "*NOP", 1,2, AddressingMode::Implied),
 
         //http://visual6502.org/wiki/index.php?title=6502_Opcode_8B_%28XAA,_ANE%29
         OpCode::new(0x8b, Mnemonic::XAA, "*XAA", 2, 3, AddressingMode::Immediate), //todo: highly unstable and not used

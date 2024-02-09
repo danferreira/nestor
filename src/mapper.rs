@@ -20,12 +20,20 @@ impl Mapper0 {
 impl Mapper for Mapper0 {
     fn read(&self, address: u16) -> u8 {
         match address {
-            0x0000..=0x1fff => {
+            0x0000..=0x1FFF => {
+                // CHR-ROM: This should be fine if you're just mirroring the address.
                 let len = self.chr_rom.len();
                 self.chr_rom[address as usize % len]
             }
-            0x6000..=0x7fff => self.prg_rom[address as usize - 0x6000],
-            0x8000..=0xffff => self.prg_rom[address as usize % self.prg_rom.len()],
+            0x8000..=0xFFFF => {
+                // PRG-ROM: Ensure mirroring if there's only one bank.
+                let bank = if self.prg_rom.len() > 0x4000 {
+                    address as usize & 0x7FFF
+                } else {
+                    address as usize & 0x3FFF
+                };
+                self.prg_rom[bank]
+            }
             _ => 0,
         }
     }
@@ -75,7 +83,13 @@ impl Mapper for Mapper3 {
             }
 
             // PRG-ROM
-            0x8000..=0xffff => self.prg_rom[address as usize - 0x8000],
+            0x8000..=0xffff => {
+                if self.prg_rom.len() == 16384 {
+                    self.prg_rom[address as usize - 0x8000 - 16384]
+                } else {
+                    self.prg_rom[address as usize - 0x8000]
+                }
+            }
 
             _ => 0,
         }

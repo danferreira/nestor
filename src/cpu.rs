@@ -2,7 +2,7 @@ use std::process;
 
 use crate::{
     bus::Bus,
-    opcodes::{Mnemonic, OPCODES_MAP},
+    opcodes::{Mnemonic, OpCode, OPCODES_MAP},
 };
 
 const CARRY_FLAG: u8 = 1 << 0;
@@ -26,11 +26,11 @@ pub struct CPU<'a> {
     pub program_counter: u16,
     pub bus: Bus<'a>,
     pub cycles: u64,
-    pc_updated: bool,
 }
 
 #[derive(Debug)]
 pub enum AddressingMode {
+    Implied,
     Accumulator,
     Immediate,
     ZeroPage,
@@ -61,7 +61,6 @@ impl<'a> CPU<'a> {
             program_counter: 0,
             bus,
             cycles: 0,
-            pc_updated: false,
         }
     }
 
@@ -75,7 +74,7 @@ impl<'a> CPU<'a> {
         address: u16,
     ) -> (u16, bool) {
         match mode {
-            AddressingMode::Immediate => (address, false),
+            AddressingMode::Immediate | AddressingMode::Implied => (address, false),
 
             AddressingMode::ZeroPage => (self.bus.mem_read(address) as u16, false),
 
@@ -228,67 +227,68 @@ impl<'a> CPU<'a> {
         }
     }
 
-    fn branch(&mut self) {
+    fn branch(&mut self, opcode: &OpCode) {
         let offset = self.bus.mem_read(self.program_counter) as i8;
         let jump_addr = self
             .program_counter
             .wrapping_add(1)
             .wrapping_add(offset as u16);
 
+        let next_instruction = self.program_counter.wrapping_add((opcode.len - 1) as u16);
+
         self.cycles += 1;
-        if page_cross(self.program_counter, jump_addr) {
+        if page_cross(next_instruction, jump_addr) {
             self.cycles += 1;
         }
 
         self.program_counter = jump_addr;
-        self.pc_updated = true;
     }
 
-    fn bcc(&mut self) {
+    fn bcc(&mut self, opcode: &OpCode) {
         if !self.get_flag(CARRY_FLAG) {
-            self.branch()
+            self.branch(opcode)
         }
     }
 
-    fn bcs(&mut self) {
+    fn bcs(&mut self, opcode: &OpCode) {
         if self.get_flag(CARRY_FLAG) {
-            self.branch()
+            self.branch(opcode)
         }
     }
 
-    fn beq(&mut self) {
+    fn beq(&mut self, opcode: &OpCode) {
         if self.get_flag(ZERO_FLAG) {
-            self.branch()
+            self.branch(opcode)
         }
     }
 
-    fn bne(&mut self) {
+    fn bne(&mut self, opcode: &OpCode) {
         if !self.get_flag(ZERO_FLAG) {
-            self.branch()
+            self.branch(opcode)
         }
     }
 
-    fn bmi(&mut self) {
+    fn bmi(&mut self, opcode: &OpCode) {
         if self.get_flag(NEGATIVE_FLAG) {
-            self.branch()
+            self.branch(opcode)
         }
     }
 
-    fn bpl(&mut self) {
+    fn bpl(&mut self, opcode: &OpCode) {
         if !self.get_flag(NEGATIVE_FLAG) {
-            self.branch()
+            self.branch(opcode)
         }
     }
 
-    fn bvc(&mut self) {
+    fn bvc(&mut self, opcode: &OpCode) {
         if !self.get_flag(OVERFLOW_FLAG) {
-            self.branch()
+            self.branch(opcode)
         }
     }
 
-    fn bvs(&mut self) {
+    fn bvs(&mut self, opcode: &OpCode) {
         if self.get_flag(OVERFLOW_FLAG) {
-            self.branch()
+            self.branch(opcode)
         }
     }
 
@@ -302,6 +302,8 @@ impl<'a> CPU<'a> {
     }
 
     fn brk(&mut self) {
+        // TODO: Dummy reads
+        self.bus.mem_read(self.program_counter);
         self.push_stack16(self.program_counter.wrapping_add(1));
 
         let status = self.processor_status | 0x10;
@@ -412,7 +414,6 @@ impl<'a> CPU<'a> {
     fn jmp(&mut self, mode: &AddressingMode) {
         let (addr, _) = self.get_operand_address(&mode);
         self.program_counter = addr;
-        self.pc_updated = true;
     }
 
     fn jsr(&mut self, mode: &AddressingMode) {
@@ -420,7 +421,6 @@ impl<'a> CPU<'a> {
         self.push_stack16(self.program_counter + 2 - 1);
 
         self.program_counter = addr;
-        self.pc_updated = true;
     }
 
     fn lda(&mut self, mode: &AddressingMode) {
@@ -484,8 +484,12 @@ impl<'a> CPU<'a> {
         }
     }
 
-    fn nop(&mut self) {
-        // do nothing
+    fn nop(&mut self, mode: &AddressingMode) {
+        let (_addr, page_cross) = self.get_operand_address(&mode);
+
+        if page_cross {
+            self.cycles += 1;
+        }
     }
 
     fn ora(&mut self, mode: &AddressingMode) {
@@ -585,17 +589,17 @@ impl<'a> CPU<'a> {
     }
 
     fn rti(&mut self) {
+        //TODO: dummy reads
+        self.bus.mem_read(self.program_counter);
         let value = self.pop_stack();
         self.set_flags(value);
 
         self.program_counter = self.pop_stack16();
-        self.pc_updated = true;
     }
 
     fn rts(&mut self) {
         self.bus.mem_read(self.program_counter);
         self.program_counter = self.pop_stack16().wrapping_add(1);
-        self.pc_updated = true;
     }
 
     fn sbc(&mut self, mode: &AddressingMode) {
@@ -976,7 +980,8 @@ impl<'a> CPU<'a> {
         self.register_y = 0;
         self.processor_status = 0b100100;
         self.stack_pointer = STACK_RESET;
-        self.cycles = 0;
+        // self.cycles = 7;
+        // self.bus.tick(7);
 
         self.program_counter = self.bus.mem_read_u16(0xFFFC);
     }
@@ -989,109 +994,107 @@ impl<'a> CPU<'a> {
     where
         F: FnMut(&mut CPU),
     {
-        loop {
-            let start_cycles = self.cycles;
-            if self.bus.poll_nmi_status().is_some() {
-                self.interrupt_nmi();
-            }
-
-            callback(self);
-
-            let code = self.bus.mem_read(self.program_counter);
-            self.program_counter = self.program_counter.wrapping_add(1);
-
-            let opcode = OPCODES_MAP
-                .get(&code)
-                .expect(&format!("OpCode {:x} is not recognized", code));
-
-            match opcode.mnemonic {
-                Mnemonic::ADC => self.adc(&opcode.mode),
-                Mnemonic::AND => self.and(&opcode.mode),
-                Mnemonic::ASL => self.asl(&opcode.mode),
-                Mnemonic::BCC => self.bcc(),
-                Mnemonic::BCS => self.bcs(),
-                Mnemonic::BEQ => self.beq(),
-                Mnemonic::BNE => self.bne(),
-                Mnemonic::BMI => self.bmi(),
-                Mnemonic::BPL => self.bpl(),
-                Mnemonic::BVC => self.bvc(),
-                Mnemonic::BVS => self.bvs(),
-                Mnemonic::BIT => self.bit(&opcode.mode),
-                Mnemonic::BRK => self.brk(),
-                Mnemonic::CLC => self.clc(),
-                Mnemonic::CLD => self.cld(),
-                Mnemonic::CLI => self.cli(),
-                Mnemonic::CLV => self.clv(),
-                Mnemonic::CMP => self.cmp(&opcode.mode),
-                Mnemonic::CPX => self.cpx(&opcode.mode),
-                Mnemonic::CPY => self.cpy(&opcode.mode),
-                Mnemonic::DEC => self.dec(&opcode.mode),
-                Mnemonic::DEX => self.dex(),
-                Mnemonic::DEY => self.dey(),
-                Mnemonic::EOR => self.eor(&opcode.mode),
-                Mnemonic::INC => self.inc(&opcode.mode),
-                Mnemonic::INX => self.inx(),
-                Mnemonic::INY => self.iny(),
-                Mnemonic::JMP => self.jmp(&opcode.mode),
-                Mnemonic::JSR => self.jsr(&opcode.mode),
-                Mnemonic::LDA => self.lda(&opcode.mode),
-                Mnemonic::LDX => self.ldx(&opcode.mode),
-                Mnemonic::LDY => self.ldy(&opcode.mode),
-                Mnemonic::LSR => self.lsr(&opcode.mode),
-                Mnemonic::NOP => self.nop(),
-                Mnemonic::ORA => self.ora(&opcode.mode),
-                Mnemonic::PHA => self.pha(),
-                Mnemonic::PHP => self.php(),
-                Mnemonic::PLA => self.pla(),
-                Mnemonic::PLP => self.plp(),
-                Mnemonic::ROL => self.rol(&opcode.mode),
-                Mnemonic::ROR => self.ror(&opcode.mode),
-                Mnemonic::RTI => self.rti(),
-                Mnemonic::RTS => self.rts(),
-                Mnemonic::SBC => self.sbc(&opcode.mode),
-                Mnemonic::SEC => self.sec(),
-                Mnemonic::SED => self.sed(),
-                Mnemonic::SEI => self.sei(),
-                Mnemonic::STA => self.sta(&opcode.mode),
-                Mnemonic::STX => self.stx(&opcode.mode),
-                Mnemonic::STY => self.sty(&opcode.mode),
-                Mnemonic::TAX => self.tax(),
-                Mnemonic::TAY => self.tay(),
-                Mnemonic::TSX => self.tsx(),
-                Mnemonic::TXA => self.txa(),
-                Mnemonic::TXS => self.txs(),
-                Mnemonic::TYA => self.tya(),
-                // Unoficial
-                Mnemonic::ALR => self.alr(&opcode.mode),
-                Mnemonic::ARR => self.arr(&opcode.mode),
-                Mnemonic::ANC => self.anc(&opcode.mode),
-                Mnemonic::AXS => self.axs(&opcode.mode),
-                Mnemonic::LAS => self.las(&opcode.mode),
-                Mnemonic::LAX => self.lax(&opcode.mode),
-                Mnemonic::SAX => self.sax(&opcode.mode),
-                Mnemonic::DCP => self.dcp(&opcode.mode),
-                Mnemonic::ISB => self.isb(&opcode.mode),
-                Mnemonic::SLO => self.slo(&opcode.mode),
-                Mnemonic::RLA => self.rla(&opcode.mode),
-                Mnemonic::SHX => self.shx(&opcode.mode),
-                Mnemonic::SHY => self.shy(&opcode.mode),
-                Mnemonic::SRE => self.sre(&opcode.mode),
-                Mnemonic::RRA => self.rra(&opcode.mode),
-                _ => todo!("{:?}", opcode.mnemonic),
-            }
-
-            if !self.pc_updated {
-                self.program_counter = self.program_counter.wrapping_add((opcode.len - 1) as u16);
-            }
-
-            self.pc_updated = false;
-
-            self.cycles += opcode.cycles as u64;
-
-            self.bus.tick((self.cycles - start_cycles) as u8);
-
-            // self.debug_tests();
+        if self.bus.poll_nmi_status().is_some() {
+            self.interrupt_nmi();
         }
+
+        let start_cycles = self.cycles;
+
+        callback(self);
+
+        let code = self.bus.mem_read(self.program_counter);
+        self.program_counter = self.program_counter.wrapping_add(1);
+        let program_counter_state = self.program_counter;
+
+        let opcode = OPCODES_MAP
+            .get(&code)
+            .expect(&format!("OpCode {:x} is not recognized", code));
+
+        match opcode.mnemonic {
+            Mnemonic::ADC => self.adc(&opcode.mode),
+            Mnemonic::AND => self.and(&opcode.mode),
+            Mnemonic::ASL => self.asl(&opcode.mode),
+            Mnemonic::BCC => self.bcc(&opcode),
+            Mnemonic::BCS => self.bcs(&opcode),
+            Mnemonic::BEQ => self.beq(&opcode),
+            Mnemonic::BNE => self.bne(&opcode),
+            Mnemonic::BMI => self.bmi(&opcode),
+            Mnemonic::BPL => self.bpl(&opcode),
+            Mnemonic::BVC => self.bvc(&opcode),
+            Mnemonic::BVS => self.bvs(&opcode),
+            Mnemonic::BIT => self.bit(&opcode.mode),
+            Mnemonic::BRK => self.brk(),
+            Mnemonic::CLC => self.clc(),
+            Mnemonic::CLD => self.cld(),
+            Mnemonic::CLI => self.cli(),
+            Mnemonic::CLV => self.clv(),
+            Mnemonic::CMP => self.cmp(&opcode.mode),
+            Mnemonic::CPX => self.cpx(&opcode.mode),
+            Mnemonic::CPY => self.cpy(&opcode.mode),
+            Mnemonic::DEC => self.dec(&opcode.mode),
+            Mnemonic::DEX => self.dex(),
+            Mnemonic::DEY => self.dey(),
+            Mnemonic::EOR => self.eor(&opcode.mode),
+            Mnemonic::INC => self.inc(&opcode.mode),
+            Mnemonic::INX => self.inx(),
+            Mnemonic::INY => self.iny(),
+            Mnemonic::JMP => self.jmp(&opcode.mode),
+            Mnemonic::JSR => self.jsr(&opcode.mode),
+            Mnemonic::LDA => self.lda(&opcode.mode),
+            Mnemonic::LDX => self.ldx(&opcode.mode),
+            Mnemonic::LDY => self.ldy(&opcode.mode),
+            Mnemonic::LSR => self.lsr(&opcode.mode),
+            Mnemonic::NOP => self.nop(&opcode.mode),
+            Mnemonic::ORA => self.ora(&opcode.mode),
+            Mnemonic::PHA => self.pha(),
+            Mnemonic::PHP => self.php(),
+            Mnemonic::PLA => self.pla(),
+            Mnemonic::PLP => self.plp(),
+            Mnemonic::ROL => self.rol(&opcode.mode),
+            Mnemonic::ROR => self.ror(&opcode.mode),
+            Mnemonic::RTI => self.rti(),
+            Mnemonic::RTS => self.rts(),
+            Mnemonic::SBC => self.sbc(&opcode.mode),
+            Mnemonic::SEC => self.sec(),
+            Mnemonic::SED => self.sed(),
+            Mnemonic::SEI => self.sei(),
+            Mnemonic::STA => self.sta(&opcode.mode),
+            Mnemonic::STX => self.stx(&opcode.mode),
+            Mnemonic::STY => self.sty(&opcode.mode),
+            Mnemonic::TAX => self.tax(),
+            Mnemonic::TAY => self.tay(),
+            Mnemonic::TSX => self.tsx(),
+            Mnemonic::TXA => self.txa(),
+            Mnemonic::TXS => self.txs(),
+            Mnemonic::TYA => self.tya(),
+            // Unoficial
+            Mnemonic::ALR => self.alr(&opcode.mode),
+            Mnemonic::ARR => self.arr(&opcode.mode),
+            Mnemonic::ANC => self.anc(&opcode.mode),
+            Mnemonic::AXS => self.axs(&opcode.mode),
+            Mnemonic::LAS => self.las(&opcode.mode),
+            Mnemonic::LAX => self.lax(&opcode.mode),
+            Mnemonic::SAX => self.sax(&opcode.mode),
+            Mnemonic::DCP => self.dcp(&opcode.mode),
+            Mnemonic::ISB => self.isb(&opcode.mode),
+            Mnemonic::SLO => self.slo(&opcode.mode),
+            Mnemonic::RLA => self.rla(&opcode.mode),
+            Mnemonic::SHX => self.shx(&opcode.mode),
+            Mnemonic::SHY => self.shy(&opcode.mode),
+            Mnemonic::SRE => self.sre(&opcode.mode),
+            Mnemonic::RRA => self.rra(&opcode.mode),
+            _ => todo!("{:?}", opcode.mnemonic),
+        }
+
+        if program_counter_state == self.program_counter {
+            self.program_counter = self.program_counter.wrapping_add((opcode.len - 1) as u16);
+        }
+
+        self.cycles += opcode.cycles as u64;
+
+        self.bus.tick((self.cycles - start_cycles) as u8);
+
+        self.debug_tests();
     }
 
     // Reads a null-terminated string starting at `addr'
