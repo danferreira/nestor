@@ -95,7 +95,7 @@ fn main() {
 
         canvas.copy(&texture, None, None).unwrap();
 
-        render_tile_borders(&mut canvas);
+        // render_tile_borders(&mut canvas);
 
         canvas.present();
 

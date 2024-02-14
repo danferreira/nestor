@@ -90,7 +90,7 @@ pub struct NesPPU {
 
     // The last written value to any PPU register
     // For use when reading the PPUSTATUS
-    pub open_bus: u8,
+    pub data_bus: u8,
 
     // Odd/even frame state
     odd_frame: bool,
@@ -138,7 +138,7 @@ impl NesPPU {
             nmi_interrupt: None,
             suppress_vbl: false,
 
-            open_bus: 0,
+            data_bus: 0,
 
             odd_frame: false,
 
@@ -497,12 +497,12 @@ impl NesPPU {
 
     pub fn cpu_read(&mut self, address: u16) -> u8 {
         match address {
-            PPUCTRL | PPUMASK | OAMADDR | PPUSCROLL | PPUADDR | OAMDMA => self.open_bus,
+            PPUCTRL | PPUMASK | OAMADDR | PPUSCROLL | PPUADDR | OAMDMA => self.data_bus,
             PPUSTATUS => {
                 let mut data = self.status.snapshot();
 
                 data &= 0xE0; // Clear the lower 5 bits
-                data |= self.open_bus & 0x1f; // Set the lower 5 bits to the last value written to PPU
+                data |= self.data_bus & 0x1f; // Set the lower 5 bits to the last value written to PPU
 
                 self.status.reset_vblank_status();
                 self.scroll.reset_latch();
@@ -515,7 +515,7 @@ impl NesPPU {
                     self.suppress_vbl = true;
                 }
 
-                self.open_bus |= data & 0xE0;
+                self.data_bus |= data & 0xE0;
                 data
             }
             OAMDATA => self.oam_data[self.oam_addr as usize],
@@ -546,7 +546,7 @@ impl NesPPU {
     }
 
     pub fn cpu_write(&mut self, address: u16, data: u8) {
-        self.open_bus = data;
+        self.data_bus = data;
 
         match address {
             PPUCTRL => {
