@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use crate::cartridge::{Mirroring, Rom};
 use crate::render::frame::Frame;
-use crate::render::palette::{self, SYSTEM_PALETTE};
+use crate::render::palette;
 use registers::addr::AddrRegister;
 use registers::control::ControlRegister;
 use registers::mask::MaskRegister;
@@ -14,6 +14,16 @@ pub mod registers;
 
 const NAMETABLE_SIZE: usize = 0x400;
 const PALETTE_SIZE: usize = 0x20;
+
+const PPUCTRL: u16 = 0x2000;
+const PPUMASK: u16 = 0x2001;
+const PPUSTATUS: u16 = 0x2002;
+const OAMADDR: u16 = 0x2003;
+const OAMDATA: u16 = 0x2004;
+const PPUSCROLL: u16 = 0x2005;
+const PPUADDR: u16 = 0x2006;
+const PPUDATA: u16 = 0x2007;
+const OAMDMA: u16 = 0x4014;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 enum Scanline {
@@ -133,25 +143,6 @@ impl NesPPU {
             odd_frame: false,
 
             frame: Frame::new(256, 240),
-        }
-    }
-
-    fn write_to_mask(&mut self, value: u8) {
-        self.mask.update(value);
-    }
-
-    fn write_to_oam_addr(&mut self, value: u8) {
-        self.oam_addr = value;
-    }
-
-    fn write_to_oam_data(&mut self, value: u8) {
-        self.oam_data[self.oam_addr as usize] = value;
-        self.oam_addr = self.oam_addr.wrapping_add(1);
-    }
-
-    fn write_oam_dma(&mut self, data: &[u8; 256]) {
-        for x in data.iter() {
-            self.write_to_oam_data(*x);
         }
     }
 
@@ -322,7 +313,10 @@ impl NesPPU {
 
                 self.render_pixel();
             }
-            (Scanline::Visible, 257) => self.transfer_x(),
+            (Scanline::Visible, 257) => {
+                self.transfer_x();
+                self.update_shift_registers();
+            }
             (Scanline::Visible, 321..=336) => {
                 self.update_shift_registers();
                 self.fetch_internal_registers()
@@ -391,6 +385,7 @@ impl NesPPU {
 
             if self.scanline > 261 {
                 self.scanline = 0;
+                self.frames += 1;
                 self.odd_frame = !self.odd_frame;
 
                 return true;
@@ -434,8 +429,6 @@ impl NesPPU {
 
             //combine the pattern bits
             bg_pixel = (p1_pixel as u8) << 1 | (p0_pixel as u8);
-
-            // println!("({}, {}) {}", self.cycle, self.scanline, bg_pixel);
 
             // fetch the palette bits
             let palette0_pixel = (self.bg_shifter_attrib_lo & bit_mux) > 0;
@@ -504,8 +497,8 @@ impl NesPPU {
 
     pub fn cpu_read(&mut self, address: u16) -> u8 {
         match address {
-            0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 | 0x4014 => self.open_bus,
-            0x2002 => {
+            PPUCTRL | PPUMASK | OAMADDR | PPUSCROLL | PPUADDR | OAMDMA => self.open_bus,
+            PPUSTATUS => {
                 let mut data = self.status.snapshot();
 
                 data &= 0xE0; // Clear the lower 5 bits
@@ -525,8 +518,8 @@ impl NesPPU {
                 self.open_bus |= data & 0xE0;
                 data
             }
-            0x2004 => self.oam_data[self.oam_addr as usize],
-            0x2007 => {
+            OAMDATA => self.oam_data[self.oam_addr as usize],
+            PPUDATA => {
                 // let addr = self.addr.get();
                 let address = self.v & 0x3fff;
                 self.increment_vram_addr();
@@ -556,7 +549,7 @@ impl NesPPU {
         self.open_bus = data;
 
         match address {
-            0x2000 => {
+            PPUCTRL => {
                 let before_nmi_status = self.ctrl.generate_vblank_nmi();
                 self.ctrl.update(data);
                 // t: ...GH.. ........ <- d: ......GH
@@ -569,18 +562,17 @@ impl NesPPU {
                     self.nmi_interrupt = Some(1)
                 }
             }
-            0x2001 => {
-                self.write_to_mask(data);
+            PPUMASK => {
+                self.mask.update(data);
             }
-            0x2002 => (),
+            PPUSTATUS => (),
 
-            0x2003 => {
-                self.write_to_oam_addr(data);
+            OAMADDR => self.oam_addr = data,
+            OAMDATA => {
+                self.oam_data[self.oam_addr as usize] = data;
+                self.oam_addr = self.oam_addr.wrapping_add(1);
             }
-            0x2004 => {
-                self.write_to_oam_data(data);
-            }
-            0x2005 => {
+            PPUSCROLL => {
                 self.scroll.write(data);
 
                 if !self.w {
@@ -593,13 +585,14 @@ impl NesPPU {
                 } else {
                     // t: FGH..AB CDE..... <- d: ABCDEFGH
                     // w:                  <- 0
+                    self.t &= 0x0C1F;
                     self.t |= ((data & 0x07) as u16) << 12;
                     self.t |= ((data & 0xF8) as u16) << 2;
                     self.w = false;
                 }
             }
 
-            0x2006 => {
+            PPUADDR => {
                 self.addr.update(data);
 
                 if !self.w {
@@ -607,7 +600,6 @@ impl NesPPU {
                     //        <unused>     <- d: AB......
                     // t: Z...... ........ <- 0 (bit Z is cleared)
                     // w:                  <- 1
-                    // ..FEDCBA ........
                     self.t = (self.t & 0x00FF) | ((data & 0x3F) as u16) << 8;
                     self.w = true;
                 } else {
@@ -619,26 +611,31 @@ impl NesPPU {
                     self.w = false;
                 }
             }
-            0x2007 => {
+            PPUDATA => {
                 // let addr = self.addr.get();
                 let address = self.v & 0x3fff;
 
                 self.mem_write(address, data);
-                self.increment_vram_addr();
+
+                if self.mask.show_background() && (self.scanline < 240 || self.scanline == 261) {
+                    self.increment_x();
+                    self.increment_y();
+                } else {
+                    self.increment_vram_addr();
+                }
             }
             0x2008..=0x3FFF => {
                 let mirror_down_addr = address & 0b00100000_00000111;
                 self.cpu_write(mirror_down_addr, data);
             }
             // https://wiki.nesdev.com/w/index.php/PPU_programmer_reference#OAM_DMA_.28.244014.29_.3E_write
-            0x4014 => {
-                let mut buffer: [u8; 256] = [0; 256];
+            OAMDMA => {
                 let hi: u16 = (data as u16) << 8;
                 for i in 0..256u16 {
-                    buffer[i as usize] = self.mem_read(hi + i);
+                    let value = self.mem_read(hi + i);
+                    self.oam_data[self.oam_addr as usize] = value;
+                    self.oam_addr = self.oam_addr.wrapping_add(1);
                 }
-
-                self.write_oam_dma(&buffer);
 
                 // todo: handle this eventually
                 // let add_cycles: u16 = if self.cycle % 2 == 1 { 514 } else { 513 };

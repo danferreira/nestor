@@ -277,7 +277,6 @@ fn nametable_viewer(ppu: &NesPPU) -> Frame {
 
             for i in 0..0x3c0 {
                 let tile_index = nametable[i] as usize;
-                println!("{} tile {:04x}", i, tile_index);
                 let bank = ppu.ctrl.bknd_pattern_addr() as usize;
 
                 let tile_block = &ppu.rom.borrow().chr_rom

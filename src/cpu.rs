@@ -56,11 +56,11 @@ impl<'a> CPU<'a> {
             register_a: 0,
             register_x: 0,
             register_y: 0,
-            processor_status: 0b100100,
+            processor_status: 0x24,
             stack_pointer: STACK_RESET,
             program_counter: 0,
-            bus,
             cycles: 0,
+            bus,
         }
     }
 
@@ -978,7 +978,7 @@ impl<'a> CPU<'a> {
         self.register_a = 0;
         self.register_x = 0;
         self.register_y = 0;
-        self.processor_status = 0b100100;
+        self.processor_status = 0x24;
         self.stack_pointer = STACK_RESET;
         // self.cycles = 7;
         // self.bus.tick(7);
