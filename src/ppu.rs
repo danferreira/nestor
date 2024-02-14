@@ -1,16 +1,21 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::cartridge::{Mirroring, Rom};
-use crate::render::frame::Frame;
-use crate::render::palette;
-use registers::addr::AddrRegister;
-use registers::control::ControlRegister;
-use registers::mask::MaskRegister;
-use registers::scroll::ScrollRegister;
-use registers::status::StatusRegister;
+mod addr;
+mod control;
+pub mod frame;
+mod mask;
+pub mod palette;
+mod scroll;
+mod status;
 
-pub mod registers;
+use crate::cartridge::{Mirroring, Rom};
+use crate::ppu::frame::Frame;
+use addr::AddrRegister;
+use control::ControlRegister;
+use mask::MaskRegister;
+use scroll::ScrollRegister;
+use status::StatusRegister;
 
 const NAMETABLE_SIZE: usize = 0x400;
 const PALETTE_SIZE: usize = 0x20;
@@ -46,7 +51,7 @@ impl Scanline {
     }
 }
 
-pub struct NesPPU {
+pub struct PPU {
     pub rom: Rc<RefCell<Rom>>,
     pub vram: [u8; 2 * NAMETABLE_SIZE],
     pub palette_table: [u8; PALETTE_SIZE],
@@ -98,9 +103,9 @@ pub struct NesPPU {
     pub frame: Frame,
 }
 
-impl NesPPU {
+impl PPU {
     pub fn new(rom: Rc<RefCell<Rom>>) -> Self {
-        NesPPU {
+        PPU {
             rom,
             vram: [0; 2 * NAMETABLE_SIZE],
             oam_data: [0; 64 * 4],

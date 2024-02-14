@@ -1,22 +1,22 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::{cartridge::Rom, joypad::Joypad, ppu::NesPPU};
+use crate::{cartridge::Rom, joypad::Joypad, ppu::PPU};
 
 pub struct Bus<'call> {
     cpu_vram: [u8; 2048],
     rom: Rc<RefCell<Rom>>,
-    pub ppu: NesPPU,
+    pub ppu: PPU,
     joypad1: Joypad,
-    gameloop_callback: Box<dyn FnMut(&NesPPU, &mut Joypad) + 'call>,
+    gameloop_callback: Box<dyn FnMut(&PPU, &mut Joypad) + 'call>,
 }
 
 impl<'call> Bus<'call> {
     pub fn new<F>(rom: Rom, gameloop_callback: F) -> Bus<'call>
     where
-        F: FnMut(&NesPPU, &mut Joypad) + 'call,
+        F: FnMut(&PPU, &mut Joypad) + 'call,
     {
         let rom_rc = Rc::new(RefCell::new(rom));
-        let ppu = NesPPU::new(Rc::clone(&rom_rc));
+        let ppu = PPU::new(Rc::clone(&rom_rc));
 
         Bus {
             cpu_vram: [0; 2048],

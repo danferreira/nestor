@@ -5,25 +5,23 @@ pub mod joypad;
 pub mod mapper;
 pub mod opcodes;
 pub mod ppu;
-pub mod render;
 pub mod trace;
 
 use std::fs;
+
+use crate::ppu::frame::Frame;
 
 use bus::Bus;
 use cartridge::{Mirroring, Rom};
 use cpu::CPU;
 use joypad::JoypadButton;
-use ppu::NesPPU;
-use render::frame::Frame;
+use ppu::{palette, PPU};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::{Color, PixelFormatEnum};
 use sdl2::rect::Rect;
 use sdl2::render::Canvas;
 use sdl2::video::Window;
-
-use crate::render::palette;
 
 #[macro_use]
 extern crate lazy_static;
@@ -90,7 +88,7 @@ fn main() {
     //     .unwrap();
 
     // the game cycle
-    let bus = Bus::new(rom, move |ppu: &NesPPU, joypad: &mut joypad::Joypad| {
+    let bus = Bus::new(rom, move |ppu: &PPU, joypad: &mut joypad::Joypad| {
         texture.update(None, &ppu.frame.data, 256 * 3).unwrap();
 
         canvas.copy(&texture, None, None).unwrap();
@@ -190,7 +188,7 @@ fn get_joypad_button(keycode: Keycode) -> Option<JoypadButton> {
     }
 }
 
-fn ppu_viewer(ppu: &NesPPU) -> Frame {
+fn ppu_viewer(ppu: &PPU) -> Frame {
     let mut frame = Frame::new(256, 128);
     let palette = &ppu.palette_table[0..4];
 
@@ -233,7 +231,7 @@ fn ppu_viewer(ppu: &NesPPU) -> Frame {
     frame
 }
 
-fn palette_viewer(ppu: &NesPPU) -> Frame {
+fn palette_viewer(ppu: &PPU) -> Frame {
     let mut frame = Frame::new(256, 8);
 
     let mut tile_x = 0;
@@ -249,7 +247,7 @@ fn palette_viewer(ppu: &NesPPU) -> Frame {
     frame
 }
 
-fn bg_pallette(ppu: &NesPPU, attribute_table: &[u8], tile_x: usize, tile_y: usize) -> [u8; 4] {
+fn bg_pallette(ppu: &PPU, attribute_table: &[u8], tile_x: usize, tile_y: usize) -> [u8; 4] {
     let group = tile_y / 4 * 8 + tile_x / 4;
     let attribute_byte = attribute_table[group];
 
@@ -266,7 +264,7 @@ fn bg_pallette(ppu: &NesPPU, attribute_table: &[u8], tile_x: usize, tile_y: usiz
     ]
 }
 
-fn nametable_viewer(ppu: &NesPPU) -> Frame {
+fn nametable_viewer(ppu: &PPU) -> Frame {
     let mut frame = Frame::new(512, 480);
     let mut x_offset = 0;
     let mut y_offset = 0;

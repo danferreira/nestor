@@ -115,7 +115,7 @@ pub fn trace(cpu: &mut CPU) -> String {
                     Mnemonic::JMP | Mnemonic::JSR => {
                         format!("${:04X}", address)
                     }
-                    _ => format!("${:04x} = {:02x}", mem_addr, stored_value),
+                    _ => format!("${:04x} = #${:02x}", mem_addr, stored_value),
                 },
                 AddressingMode::AbsoluteX => format!(
                     "${:04x},X @ {:04x} = {:02x}",
@@ -146,24 +146,21 @@ pub fn trace(cpu: &mut CPU) -> String {
         .collect::<Vec<String>>()
         .join(" ");
     let asm_str = format!(
-        "{:04x}  {:8} {: >4} {}",
+        "${:04x}: {:8}{: >4} {}",
         begin, hex_str, ops.mnemonic_name, tmp
     )
     .trim()
+    .to_ascii_uppercase()
     .to_string();
 
-    let ppu = cpu.bus.ppu.borrow();
     format!(
-        "{:47} A:{:02x} X:{:02x} Y:{:02x} P:{:02x} SP:{:02x} PPU:{: >3},{: >3} CYC:{}",
-        asm_str,
+        "c{:<12}A:{:02X} X:{:02X} Y:{:02X} S:{:02X}  {}",
+        cpu.cycles,
         cpu.register_a,
         cpu.register_x,
         cpu.register_y,
-        cpu.processor_status,
         cpu.stack_pointer,
-        ppu.scanline,
-        ppu.cycles,
-        cpu.cycles
+        asm_str,
+        // cpu.bus.borrow().ppu.scanline
     )
-    .to_ascii_uppercase()
 }
