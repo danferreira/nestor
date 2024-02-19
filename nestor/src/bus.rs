@@ -1,20 +1,20 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::{cartridge::Rom, joypad::Joypad, ppu::PPU};
+use crate::{
+    cartridge::Rom,
+    joypad::Joypad,
+    ppu::{frame::Frame, PPU},
+};
 
-pub struct Bus<'call> {
+pub struct Bus {
     cpu_vram: [u8; 2048],
     rom: Rc<RefCell<Rom>>,
     pub ppu: PPU,
-    joypad1: Joypad,
-    gameloop_callback: Box<dyn FnMut(&PPU, &mut Joypad) + 'call>,
+    pub joypad1: Joypad,
 }
 
-impl<'call> Bus<'call> {
-    pub fn new<F>(rom: Rom, gameloop_callback: F) -> Bus<'call>
-    where
-        F: FnMut(&PPU, &mut Joypad) + 'call,
-    {
+impl Bus {
+    pub fn new(rom: Rom) -> Bus {
         let rom_rc = Rc::new(RefCell::new(rom));
         let ppu = PPU::new(Rc::clone(&rom_rc));
 
@@ -23,11 +23,10 @@ impl<'call> Bus<'call> {
             rom: rom_rc,
             ppu,
             joypad1: Joypad::new(),
-            gameloop_callback: Box::from(gameloop_callback),
         }
     }
 
-    pub fn tick(&mut self, cycles: u8) {
+    pub fn tick(&mut self, cycles: u8) -> Option<&Frame> {
         let mut frame_complete = false;
 
         for _ in 0..(cycles * 3) {
@@ -38,7 +37,9 @@ impl<'call> Bus<'call> {
         }
 
         if frame_complete {
-            (self.gameloop_callback)(&self.ppu, &mut self.joypad1);
+            Some(&self.ppu.frame)
+        } else {
+            None
         }
     }
 

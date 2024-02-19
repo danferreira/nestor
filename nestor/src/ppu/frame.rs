@@ -1,3 +1,4 @@
+#[derive(Clone)]
 pub struct Frame {
     width: usize,
     pub data: Vec<u8>,

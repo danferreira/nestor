@@ -17,14 +17,14 @@ const NEGATIVE_FLAG: u8 = 1 << 7;
 
 const STACK_RESET: u8 = 0xFD;
 
-pub struct CPU<'a> {
+pub struct CPU {
     pub register_a: u8,
     pub register_x: u8,
     pub register_y: u8,
     pub processor_status: u8,
     pub stack_pointer: u8,
     pub program_counter: u16,
-    pub bus: Bus<'a>,
+    pub bus: Bus,
     pub cycles: u64,
 }
 
@@ -50,7 +50,7 @@ fn page_cross(addr1: u16, addr2: u16) -> bool {
     addr1 & 0xFF00 != addr2 & 0xFF00
 }
 
-impl<'a> CPU<'a> {
+impl CPU {
     pub fn new(bus: Bus) -> CPU {
         CPU {
             register_a: 0,
@@ -986,11 +986,11 @@ impl<'a> CPU<'a> {
         self.program_counter = self.bus.mem_read_u16(0xFFFC);
     }
 
-    pub fn run(&mut self) {
-        self.run_with_callback(|_| {});
+    pub fn run(&mut self) -> u8 {
+        self.run_with_callback(|_| {})
     }
 
-    pub fn run_with_callback<F>(&mut self, mut callback: F)
+    pub fn run_with_callback<F>(&mut self, mut callback: F) -> u8
     where
         F: FnMut(&mut CPU),
     {
@@ -1092,9 +1092,9 @@ impl<'a> CPU<'a> {
 
         self.cycles += opcode.cycles as u64;
 
-        self.bus.tick((self.cycles - start_cycles) as u8);
+        (self.cycles - start_cycles) as u8
 
-        self.debug_tests();
+        // self.debug_tests();
     }
 
     // Reads a null-terminated string starting at `addr'
