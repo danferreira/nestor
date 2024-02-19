@@ -1,33 +1,18 @@
-pub mod bus;
-pub mod cartridge;
-pub mod cpu;
-pub mod joypad;
-pub mod mapper;
-pub mod opcodes;
-pub mod ppu;
-pub mod trace;
-
-use std::fs;
-
 use crate::ppu::frame::Frame;
+use std::fs;
 
 use bus::Bus;
 use cartridge::{Mirroring, Rom};
 use cpu::CPU;
 use joypad::JoypadButton;
 use ppu::{palette, PPU};
+
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::{Color, PixelFormatEnum};
 use sdl2::rect::Rect;
 use sdl2::render::Canvas;
 use sdl2::video::Window;
-
-#[macro_use]
-extern crate lazy_static;
-
-#[macro_use]
-extern crate bitflags;
 
 fn main() {
     let path = std::env::args().nth(1).expect("no path given");
