@@ -30,7 +30,7 @@ fn main() {
 
     let creator = canvas.texture_creator();
     let mut texture = creator
-        .create_texture_streaming(PixelFormatEnum::RGB24, width, height)
+        .create_texture_target(PixelFormatEnum::RGB24, width, height)
         .unwrap();
 
     // let ppu_window = video_subsystem
@@ -104,28 +104,6 @@ fn main() {
     let mut nes = NES::new(path);
 
     loop {
-        for event in event_pump.poll_iter() {
-            match event {
-                Event::Quit { .. }
-                | Event::KeyDown {
-                    keycode: Some(Keycode::Escape),
-                    ..
-                } => std::process::exit(0),
-
-                Event::KeyDown { keycode, .. } => {
-                    if let Some(key) = get_joypad_button(keycode.unwrap_or(Keycode::Ampersand)) {
-                        nes.cpu.bus.joypad1.set_button_pressed_status(key, true);
-                    }
-                }
-                Event::KeyUp { keycode, .. } => {
-                    if let Some(key) = get_joypad_button(keycode.unwrap_or(Keycode::Ampersand)) {
-                        nes.cpu.bus.joypad1.set_button_pressed_status(key, false);
-                    }
-                }
-                _ => { /* do nothing */ }
-            }
-        }
-
         let frame = nes.emulate_frame();
 
         if let Some(frame) = frame {
@@ -133,9 +111,31 @@ fn main() {
 
             canvas.copy(&texture, None, None).unwrap();
 
-            // render_tile_borders(&mut canvas);
-
             canvas.present();
+
+            for event in event_pump.poll_iter() {
+                match event {
+                    Event::Quit { .. }
+                    | Event::KeyDown {
+                        keycode: Some(Keycode::Escape),
+                        ..
+                    } => std::process::exit(0),
+
+                    Event::KeyDown { keycode, .. } => {
+                        if let Some(key) = get_joypad_button(keycode.unwrap_or(Keycode::Ampersand))
+                        {
+                            nes.cpu.bus.joypad1.set_button_pressed_status(key, true);
+                        }
+                    }
+                    Event::KeyUp { keycode, .. } => {
+                        if let Some(key) = get_joypad_button(keycode.unwrap_or(Keycode::Ampersand))
+                        {
+                            nes.cpu.bus.joypad1.set_button_pressed_status(key, false);
+                        }
+                    }
+                    _ => { /* do nothing */ }
+                }
+            }
         }
     }
 }
