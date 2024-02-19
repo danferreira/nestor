@@ -95,7 +95,14 @@ impl<'call> Bus<'call> {
             0x4017 => {
                 // ignore joypad 2
             }
-            0x4014 => self.ppu.cpu_write(addr, data),
+            0x4014 => {
+                let hi: u16 = (data as u16) << 8;
+                for i in 0..256u16 {
+                    let value = self.mem_read(hi + i);
+                    self.ppu.oam_data[self.ppu.oam_addr as usize] = value;
+                    self.ppu.oam_addr = self.ppu.oam_addr.wrapping_add(1);
+                }
+            }
             // SRAM
             0x6000..=0x7fff => self.rom.borrow_mut().mapper.write(addr, data),
             // PRG-ROM

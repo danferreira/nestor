@@ -2,7 +2,6 @@ use crate::cpu::AddressingMode;
 use crate::cpu::CPU;
 use crate::opcodes;
 use crate::opcodes::Mnemonic;
-use std::borrow::Borrow;
 use std::collections::HashMap;
 
 lazy_static! {

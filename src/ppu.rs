@@ -7,6 +7,7 @@ pub mod frame;
 mod mask;
 pub mod palette;
 mod scroll;
+mod sprite;
 mod status;
 
 use crate::cartridge::{Mirroring, Rom};
@@ -15,10 +16,12 @@ use addr::AddrRegister;
 use control::ControlRegister;
 use mask::MaskRegister;
 use scroll::ScrollRegister;
+use sprite::Sprite;
 use status::StatusRegister;
 
 const NAMETABLE_SIZE: usize = 0x400;
 const PALETTE_SIZE: usize = 0x20;
+const OAM_SIZE: usize = 0x100;
 
 const PPUCTRL: u16 = 0x2000;
 const PPUMASK: u16 = 0x2001;
@@ -28,7 +31,6 @@ const OAMDATA: u16 = 0x2004;
 const PPUSCROLL: u16 = 0x2005;
 const PPUADDR: u16 = 0x2006;
 const PPUDATA: u16 = 0x2007;
-const OAMDMA: u16 = 0x4014;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 enum Scanline {
@@ -55,12 +57,14 @@ pub struct PPU {
     pub rom: Rc<RefCell<Rom>>,
     pub vram: [u8; 2 * NAMETABLE_SIZE],
     pub palette_table: [u8; PALETTE_SIZE],
-    pub oam_data: [u8; 256],
+
+    pub oam_data: [u8; OAM_SIZE],
+    secondary_oam_data: Vec<Option<Sprite>>,
     pub oam_addr: u8,
 
     pub scanline: usize,
     pub cycle: usize,
-    frames: usize,
+    frame_count: usize,
 
     pub mask: MaskRegister,
     pub addr: AddrRegister,
@@ -81,11 +85,11 @@ pub struct PPU {
     bg_tile_lo: u8,
     bg_tile_hi: u8,
 
-    // Two 16-bit shift registers for the pattern table data
+    // Shifters
     bg_shifter_pattern_lo: u16,
     bg_shifter_pattern_hi: u16,
-
-    // Two 16-bit shift registers for the attribute table data
+    sprite_shifter_pattern_lo: [u8; 8],
+    sprite_shifter_pattern_hi: [u8; 8],
     bg_shifter_attrib_lo: u16,
     bg_shifter_attrib_hi: u16,
 
@@ -108,8 +112,11 @@ impl PPU {
         PPU {
             rom,
             vram: [0; 2 * NAMETABLE_SIZE],
-            oam_data: [0; 64 * 4],
+            oam_data: [0xFF; OAM_SIZE],
             oam_addr: 0,
+            secondary_oam_data: vec![None; 8],
+            sprite_shifter_pattern_lo: [0; 8],
+            sprite_shifter_pattern_hi: [0; 8],
             palette_table: [0; PALETTE_SIZE],
 
             mask: MaskRegister::new(),
@@ -138,7 +145,7 @@ impl PPU {
 
             scanline: 0,
             cycle: 0,
-            frames: 0,
+            frame_count: 0,
 
             nmi_interrupt: None,
             suppress_vbl: false,
@@ -155,12 +162,6 @@ impl PPU {
         self.addr.increment(self.ctrl.vram_addr_increment());
 
         self.v = self.v.wrapping_add(self.ctrl.vram_addr_increment() as u16);
-    }
-
-    fn is_sprite_0_hit(&self, cycle: usize) -> bool {
-        let y = self.oam_data[0] as usize;
-        let x = self.oam_data[3] as usize;
-        (y == self.scanline as usize) && x <= cycle && self.mask.show_sprites()
     }
 
     // The coarse X component of v needs to be incremented when the next tile is reached.
@@ -299,105 +300,19 @@ impl PPU {
             self.bg_shifter_attrib_lo <<= 1;
             self.bg_shifter_attrib_hi <<= 1;
         }
-    }
 
-    pub fn tick(&mut self) -> bool {
-        let scanline_step = Scanline::from(self.scanline as usize);
-
-        match (scanline_step, self.cycle) {
-            (_, 0) => {
-                //  idle cycle
-            }
-            (Scanline::Visible, 1..=256) => {
-                self.update_shift_registers();
-                self.fetch_internal_registers();
-
-                if self.cycle == 256 {
-                    self.increment_y();
-                }
-
-                self.render_pixel();
-            }
-            (Scanline::Visible, 257) => {
-                self.transfer_x();
-                self.update_shift_registers();
-            }
-            (Scanline::Visible, 321..=336) => {
-                self.update_shift_registers();
-                self.fetch_internal_registers()
-            }
-            (Scanline::Visible, 337 | 339) => {
-                // Unused NT fetches
-                self.fetch_nametable_byte();
-            }
-            (Scanline::PostRender, _) => {
-                //Idle. Do nothing
-            }
-            (Scanline::VBlank, 1) => {
-                if self.scanline == 241 {
-                    if !self.suppress_vbl {
-                        self.status.set_vblank_status(true);
-                        if self.ctrl.generate_vblank_nmi() {
-                            self.nmi_interrupt = Some(1);
-                        }
+        if self.mask.show_sprites() && self.cycle >= 2 && self.cycle < 258 {
+            for (i, sprite) in self.secondary_oam_data.iter_mut().enumerate() {
+                if let Some(sprite) = sprite {
+                    if sprite.x > 0 {
+                        sprite.x -= 1;
+                    } else {
+                        self.sprite_shifter_pattern_lo[i] <<= 1;
+                        self.sprite_shifter_pattern_hi[i] <<= 1;
                     }
                 }
             }
-            (Scanline::PreRender, 1..=256) => {
-                if self.cycle == 1 {
-                    self.status.reset_vblank_status();
-                    self.status.set_sprite_zero_hit(false);
-                    self.status.set_sprite_overflow(false);
-                    self.nmi_interrupt = None;
-                    self.suppress_vbl = false;
-                }
-
-                self.fetch_internal_registers();
-
-                if self.cycle == 256 {
-                    self.increment_y();
-                }
-            }
-
-            (Scanline::PreRender, 257) => self.transfer_x(),
-            (Scanline::PreRender, 280..=304) => self.transfer_y(),
-            (Scanline::PreRender, 321..=336) => {
-                self.update_shift_registers();
-                self.fetch_internal_registers()
-            }
-            (Scanline::PreRender, 337) => {
-                self.fetch_nametable_byte();
-            }
-            (Scanline::PreRender, 339) => {
-                self.fetch_nametable_byte();
-
-                // The "Skipped on BG+odd" tick is implemented by jumping directly
-                // from (339, 261) to (0, 0), meaning the last tick of the last NT
-                // fetch takes place at (0, 0) on odd frames replacing the idle tick
-                if self.mask.rendering_enabled() && self.odd_frame {
-                    self.cycle = 340;
-                }
-            }
-            _ => (),
         }
-
-        // cycle:    0 - 340
-        // scanline: 0 - 261
-        self.cycle += 1;
-        if self.cycle > 340 {
-            self.cycle = 0;
-            self.scanline += 1;
-
-            if self.scanline > 261 {
-                self.scanline = 0;
-                self.frames += 1;
-                self.odd_frame = !self.odd_frame;
-
-                return true;
-            }
-        }
-
-        return false;
     }
 
     fn fetch_internal_registers(&mut self) {
@@ -420,11 +335,150 @@ impl PPU {
         }
     }
 
+    fn sprite_evaluation(&mut self) {
+        if self.mask.rendering_enabled() {
+            self.secondary_oam_data.clear();
+
+            let next_scanline = (self.scanline + 1) as i16;
+            let mut sprite_count = 0;
+
+            for n in 0..64 {
+                let offset = n * 4;
+                let oam_entry = &self.oam_data[offset..offset + 4];
+                let sprite_y = (oam_entry[0] as u16) + 1;
+                let diff = next_scanline - sprite_y as i16;
+                let sprite_size = self.ctrl.sprite_size();
+
+                if diff >= 0 && diff < sprite_size as i16 {
+                    if sprite_count >= 8 {
+                        self.status.set_sprite_overflow(true);
+                        break;
+                    }
+
+                    sprite_count += 1;
+
+                    let sprite: Sprite = Sprite::from(oam_entry, n == 0);
+                    self.secondary_oam_data.push(Some(sprite));
+                }
+            }
+        }
+    }
+
+    fn load_sprites(&mut self) {
+        if self.mask.show_sprites() {
+            let next_scanline = (self.scanline + 1) as u16;
+
+            for (i, sprite) in self.secondary_oam_data.iter().enumerate() {
+                if let Some(ref sprite) = sprite {
+                    let sprite_height = self.ctrl.sprite_size();
+
+                    // Determine fine y for vertical flipping
+                    let fine_y = if sprite.flip_v() {
+                        (sprite_height - 1) - (next_scanline - sprite.y) as u8
+                    } else {
+                        (next_scanline - sprite.y) as u8
+                    };
+
+                    // In 8x16 mode the PPU ignores the sprite pattern table selection in the CTRL register
+                    // the bottom tile is the next one
+                    // The tile number selection is then the upper bits of the tile attribute (upper tile)
+                    // The table selection instead comes from the first bit of the sprite's tile attribute
+                    // Re-adjusting the fine y will also be necessary
+                    let (pattern_table, tile, fine_y) = if sprite_height == 16 {
+                        let bottom_tile = fine_y > 7;
+                        (
+                            sprite.pattern_table_8x16(),
+                            sprite.tile_number_8x16() + if bottom_tile { 1 } else { 0 },
+                            fine_y - if bottom_tile { 8 } else { 0 },
+                        )
+                    } else {
+                        (self.ctrl.sprt_pattern_addr(), sprite.tile, fine_y)
+                    };
+                    let pattern = self.read_pattern(pattern_table, tile, fine_y);
+
+                    // Reverse bit pattern if the sprite is horizontally flipped
+                    let pattern = if sprite.flip_h() {
+                        (self.flip_byte(pattern.0), self.flip_byte(pattern.1))
+                    } else {
+                        pattern
+                    };
+
+                    // Reverse bit pattern if the sprite is horizontally flipped
+                    let (address_lo, address_hi) = pattern;
+
+                    self.sprite_shifter_pattern_lo[i] = address_lo;
+                    self.sprite_shifter_pattern_hi[i] = address_hi;
+                }
+            }
+        }
+    }
+
+    fn read_pattern(&self, base: u16, tile_no: u8, fine_y: u8) -> (u8, u8) {
+        let tile_offset = (tile_no as u16 * 16) + fine_y as u16;
+
+        let lo = self.mem_read(base + tile_offset);
+        let hi = self.mem_read(base + tile_offset + 8);
+
+        (lo, hi)
+    }
+
+    fn flip_byte(&self, mut b: u8) -> u8 {
+        b = (b & 0xF0) >> 4 | (b & 0x0F) << 4;
+        b = (b & 0xCC) >> 2 | (b & 0x33) << 2;
+        b = (b & 0xAA) >> 1 | (b & 0x55) << 1;
+
+        b
+    }
+
     fn render_pixel(&mut self) {
+        let (bg_pixel, bg_palette) = self.render_background();
+        let (fg_pixel, fg_palette, fg_priority, is_sprite_0) = self.render_foreground();
+
+        let mut pixel = 0x00;
+        let mut palette = 0x00;
+
+        if bg_pixel == 0 && fg_pixel == 0 {
+            pixel = 0x00;
+            palette = 0x00;
+        } else if bg_pixel == 0 && fg_pixel > 0 {
+            pixel = fg_pixel;
+            palette = fg_palette;
+        } else if bg_pixel > 0 && fg_pixel == 0 {
+            pixel = bg_pixel;
+            palette = bg_palette;
+        } else if bg_pixel > 0 && fg_pixel > 0 {
+            if fg_priority {
+                pixel = fg_pixel;
+                palette = fg_palette;
+            } else {
+                pixel = bg_pixel;
+                palette = bg_palette;
+            }
+
+            // https://www.nesdev.org/wiki/PPU_OAM#Sprite_zero_hits
+            if self.mask.rendering_enabled() && self.cycle != 255 {
+                self.status.set_sprite_zero_hit(is_sprite_0)
+            }
+        }
+
+        let mut color = self.fetch_color_from_palette(palette, pixel);
+
+        if self.mask.is_grayscale() {
+            color &= &0x30
+        }
+
+        let rgb = palette::SYSTEM_PALETTE[color as usize];
+
+        self.frame
+            .set_pixel(self.cycle - 1, self.scanline as usize, rgb);
+    }
+
+    fn render_background(&self) -> (u8, u8) {
         let mut bg_pixel = 0x00; // The 2-bit pixel to be rendered
         let mut bg_palette = 0x00; // The 3-bit index of the palette the pixel indexes
 
-        if self.mask.show_background() || self.mask.show_sprites() {
+        if self.mask.show_background() && (self.cycle >= 8 || self.mask.leftmost_8pxl_background())
+        {
             //get the bit value from the pattern shift registers
             let bit_mux = 0x8000 >> self.fine_x;
 
@@ -443,20 +497,57 @@ impl PPU {
             bg_palette = (palette1_pixel as u8) << 1 | (palette0_pixel as u8);
         }
 
-        let color = self.fetch_color_from_palette(bg_palette, bg_pixel);
-        let rgb = palette::SYSTEM_PALETTE[color as usize];
+        (bg_pixel, bg_palette)
+    }
 
-        self.frame
-            .set_pixel(self.cycle - 1, self.scanline as usize, rgb);
+    fn render_foreground(&self) -> (u8, u8, bool, bool) {
+        let mut fg_pixel = 0x00;
+        let mut fg_palette = 0x00;
+        let mut fg_priority = false;
+        let mut is_sprite_0 = false;
+
+        if self.mask.show_sprites() && (self.cycle >= 8 || self.mask.leftmost_8pxl_sprite()) {
+            // Iterate through all sprites for this scanline. This is to maintain
+            // sprite priority. As soon as we find a non transparent pixel of
+            // a sprite we can abort
+
+            for (i, sprite) in self.secondary_oam_data.iter().enumerate() {
+                if let Some(sprite) = sprite {
+                    // Scanline cycle has "collided" with sprite, shifters taking over
+                    if sprite.x == 0 {
+                        // Note Fine X scrolling does not apply to sprites, the game
+                        // should maintain their relationship with the background. So
+                        // we'll just use the MSB of the shifter
+
+                        // Determine the pixel value...
+                        let fg_pixel_lo = (self.sprite_shifter_pattern_lo[i] & 0x80) > 0;
+                        let fg_pixel_hi = (self.sprite_shifter_pattern_hi[i] & 0x80) > 0;
+                        fg_pixel = ((fg_pixel_hi as u8) << 1) | fg_pixel_lo as u8;
+
+                        // Extract the palette from the bottom two bits. Recall
+                        // that foreground palettes are the latter 4 in the
+                        // palette memory.
+                        fg_palette = sprite.palette();
+                        fg_priority = sprite.priority();
+                        is_sprite_0 = sprite.is_sprite_0;
+
+                        // If pixel is not transparent, we render it, and dont
+                        // bother checking the rest because the earlier sprites
+                        // in the list are higher priority
+                        if fg_pixel != 0 {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        (fg_pixel, fg_palette, fg_priority, is_sprite_0)
     }
 
     fn fetch_color_from_palette(&self, palette: u8, pixel: u8) -> u8 {
         let palette_addr = 0x3F00 + (palette as u16 * 4) + pixel as u16;
         self.mem_read(palette_addr)
-    }
-
-    pub fn poll_nmi_interrupt(&mut self) -> Option<u8> {
-        self.nmi_interrupt.take()
     }
 
     fn mirror_nametable(&self, addr: u16) -> u16 {
@@ -502,7 +593,7 @@ impl PPU {
 
     pub fn cpu_read(&mut self, address: u16) -> u8 {
         match address {
-            PPUCTRL | PPUMASK | OAMADDR | PPUSCROLL | PPUADDR | OAMDMA => self.data_bus,
+            PPUCTRL | PPUMASK | OAMADDR | PPUSCROLL | PPUADDR => self.data_bus,
             PPUSTATUS => {
                 let mut data = self.status.snapshot();
 
@@ -633,22 +724,116 @@ impl PPU {
                 let mirror_down_addr = address & 0b00100000_00000111;
                 self.cpu_write(mirror_down_addr, data);
             }
-            // https://wiki.nesdev.com/w/index.php/PPU_programmer_reference#OAM_DMA_.28.244014.29_.3E_write
-            OAMDMA => {
-                let hi: u16 = (data as u16) << 8;
-                for i in 0..256u16 {
-                    let value = self.mem_read(hi + i);
-                    self.oam_data[self.oam_addr as usize] = value;
-                    self.oam_addr = self.oam_addr.wrapping_add(1);
-                }
-
-                // todo: handle this eventually
-                // let add_cycles: u16 = if self.cycle % 2 == 1 { 514 } else { 513 };
-                // self.tick(add_cycles); //todo this will cause weird effects as PPU will have 513/514 * 3 ticks
-            }
             _ => {
                 panic!("Ignoring mem write-access at {:04X}", address);
             }
         }
+    }
+
+    pub fn poll_nmi_interrupt(&mut self) -> Option<u8> {
+        self.nmi_interrupt.take()
+    }
+
+    pub fn tick(&mut self) -> bool {
+        let scanline_step = Scanline::from(self.scanline as usize);
+
+        match (scanline_step, self.cycle) {
+            (_, 0) => {
+                //  idle cycle
+            }
+            (Scanline::PreRender, 1..=256) => {
+                if self.cycle == 1 {
+                    self.status.reset_vblank_status();
+                    self.status.set_sprite_zero_hit(false);
+                    self.status.set_sprite_overflow(false);
+                    self.nmi_interrupt = None;
+                    self.suppress_vbl = false;
+
+                    self.sprite_shifter_pattern_lo = [0; 8];
+                    self.sprite_shifter_pattern_hi = [0; 8];
+                }
+
+                self.fetch_internal_registers();
+
+                if self.cycle == 256 {
+                    self.increment_y();
+                }
+            }
+            (Scanline::PreRender, 257) => self.transfer_x(),
+            (Scanline::PreRender, 280..=304) => self.transfer_y(),
+            (Scanline::PreRender, 321..=336) => {
+                self.update_shift_registers();
+                self.fetch_internal_registers()
+            }
+            (Scanline::PreRender, 337) => {
+                self.fetch_nametable_byte();
+            }
+            (Scanline::PreRender, 339) => {
+                self.fetch_nametable_byte();
+
+                // The "Skipped on BG+odd" tick is implemented by jumping directly
+                // from (339, 261) to (0, 0), meaning the last tick of the last NT
+                // fetch takes place at (0, 0) on odd frames replacing the idle tick
+                if self.mask.rendering_enabled() && self.odd_frame {
+                    self.cycle = 340;
+                }
+            }
+            (Scanline::Visible, 1..=256) => {
+                self.update_shift_registers();
+                self.fetch_internal_registers();
+
+                if self.cycle == 256 {
+                    self.increment_y();
+                }
+
+                self.render_pixel();
+            }
+            (Scanline::Visible, 257) => {
+                self.transfer_x();
+                self.update_shift_registers();
+                self.sprite_evaluation();
+            }
+            (Scanline::Visible, 321..=336) => {
+                self.update_shift_registers();
+                self.fetch_internal_registers()
+            }
+            (Scanline::Visible, 337 | 339) => {
+                // Unused NT fetches
+                self.fetch_nametable_byte();
+            }
+            (Scanline::Visible, 340) => self.load_sprites(),
+            (Scanline::PostRender, _) => {
+                //Idle. Do nothing
+            }
+            (Scanline::VBlank, 1) => {
+                if self.scanline == 241 {
+                    if !self.suppress_vbl {
+                        self.status.set_vblank_status(true);
+                        if self.ctrl.generate_vblank_nmi() {
+                            self.nmi_interrupt = Some(1);
+                        }
+                    }
+                }
+            }
+            _ => (),
+        }
+
+        // cycle:    0 - 340
+        // scanline: 0 - 261
+        self.cycle += 1;
+        if self.cycle > 340 {
+            self.cycle = 0;
+            self.scanline += 1;
+
+            if self.scanline > 261 {
+                self.scanline = 0;
+                self.frame_count += 1;
+                self.odd_frame = !self.odd_frame;
+
+                return true;
+            }
+        }
+
+        return false;
     }
 }

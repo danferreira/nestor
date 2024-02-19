@@ -304,7 +304,7 @@ fn nametable_viewer(ppu: &PPU) -> Frame {
 
                         let x = tile_x * 8 + x;
                         let y = tile_y * 8 + y;
-                        // println!("({}, {}) {}", x_offset + x, y_offset + y, value);
+
                         frame.set_pixel(x_offset + x, y_offset + y, rgb);
                     }
                 }
