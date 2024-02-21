@@ -12,6 +12,7 @@ bitflags! {
     }
 }
 
+#[derive(Clone)]
 pub struct Joypad {
     strobe: bool,
     button_index: u8,

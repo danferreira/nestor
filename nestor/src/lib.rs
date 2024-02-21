@@ -10,6 +10,7 @@ mod trace;
 
 pub use joypad::JoypadButton;
 pub use nes::NES;
+pub use ppu::frame;
 
 #[macro_use]
 extern crate lazy_static;

@@ -1,5 +1,4 @@
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 mod addr;
 mod control;
@@ -54,7 +53,7 @@ impl Scanline {
 }
 
 pub struct PPU {
-    pub rom: Rc<RefCell<Rom>>,
+    pub rom: Arc<Mutex<Rom>>,
     pub vram: [u8; 2 * NAMETABLE_SIZE],
     pub palette_table: [u8; PALETTE_SIZE],
 
@@ -108,7 +107,7 @@ pub struct PPU {
 }
 
 impl PPU {
-    pub fn new(rom: Rc<RefCell<Rom>>) -> Self {
+    pub fn new(rom: Arc<Mutex<Rom>>) -> Self {
         PPU {
             rom,
             vram: [0; 2 * NAMETABLE_SIZE],
@@ -553,7 +552,7 @@ impl PPU {
     fn mirror_nametable(&self, addr: u16) -> u16 {
         let mirrored_vram = addr & 0x0FFF;
         let nametable_index = mirrored_vram / 0x400;
-        match (&self.rom.borrow().mirroring, nametable_index) {
+        match (&self.rom.lock().unwrap().mirroring, nametable_index) {
             (Mirroring::Vertical, 2) | (Mirroring::Vertical, 3) => mirrored_vram - 0x800,
             (Mirroring::Horizontal, 1) | (Mirroring::Horizontal, 2) => mirrored_vram - 0x400,
             (Mirroring::Horizontal, 3) => mirrored_vram - 0x800,
@@ -572,7 +571,7 @@ impl PPU {
 
     fn mem_read(&self, address: u16) -> u8 {
         match address {
-            0..=0x1fff => self.rom.borrow().mapper.read(address),
+            0..=0x1fff => self.rom.lock().unwrap().mapper.read(address),
             0x2000..=0x3eff => self.vram[self.mirror_nametable(address) as usize],
             0x3f00..=0x3fff => self.palette_table[self.mirror_palette(address)],
             _ => panic!("unexpected access to mirrored space {}", address),
@@ -581,7 +580,7 @@ impl PPU {
 
     fn mem_write(&mut self, address: u16, data: u8) {
         match address {
-            0..=0x1fff => self.rom.borrow_mut().mapper.write(address, data),
+            0..=0x1fff => self.rom.lock().unwrap().mapper.write(address, data),
             0x2000..=0x2fff => self.vram[self.mirror_nametable(address) as usize] = data,
             0x3000..=0x3eff => {
                 unimplemented!("address {} shouldn't be used in reallity", address)

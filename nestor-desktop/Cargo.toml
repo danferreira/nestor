@@ -1,0 +1,8 @@
+[package]
+name = "nestor-desktop"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+iced = { version = "0.12.0", features = ["multi-window", "canvas", "image"] }
+nestor = { version = "0.1.0", path = "../nestor" }

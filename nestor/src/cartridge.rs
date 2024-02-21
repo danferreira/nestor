@@ -15,7 +15,7 @@ pub enum Mirroring {
 pub struct Rom {
     pub prg_rom: Vec<u8>,
     pub chr_rom: Vec<u8>,
-    pub mapper: Box<dyn Mapper>,
+    pub mapper: Box<dyn Mapper + Send>,
     pub mirroring: Mirroring,
 }
 
@@ -65,7 +65,7 @@ impl Rom {
 
         let mapper_idx = (raw[7] & 0b1111_0000) | (raw[6] >> 4);
 
-        let mapper: Box<dyn Mapper> = match mapper_idx {
+        let mapper: Box<dyn Mapper + Send> = match mapper_idx {
             0 => Box::new(Mapper0::new(prg_rom.clone(), chr_rom.clone())),
             // 3 => Box::new(Mapper3::new(prg_rom.clone(), chr_rom.clone())),
             _ => panic!("Mapper not implement yet {mapper_idx}"),

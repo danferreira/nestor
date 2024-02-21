@@ -103,7 +103,7 @@ fn main() {
 
     let mut nes = NES::new(path);
 
-    loop {
+    'running: loop {
         let frame = nes.emulate_frame();
 
         if let Some(frame) = frame {
@@ -119,7 +119,7 @@ fn main() {
                     | Event::KeyDown {
                         keycode: Some(Keycode::Escape),
                         ..
-                    } => std::process::exit(0),
+                    } => break 'running,
 
                     Event::KeyDown { keycode, .. } => {
                         if let Some(key) = get_joypad_button(keycode.unwrap_or(Keycode::Ampersand))

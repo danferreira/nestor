@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::sync::{Arc, Mutex};
 
 use crate::{
     cartridge::Rom,
@@ -8,15 +8,15 @@ use crate::{
 
 pub struct Bus {
     cpu_vram: [u8; 2048],
-    rom: Rc<RefCell<Rom>>,
+    rom: Arc<Mutex<Rom>>,
     pub ppu: PPU,
     pub joypad1: Joypad,
 }
 
 impl Bus {
     pub fn new(rom: Rom) -> Bus {
-        let rom_rc = Rc::new(RefCell::new(rom));
-        let ppu = PPU::new(Rc::clone(&rom_rc));
+        let rom_rc = Arc::new(Mutex::new(rom));
+        let ppu = PPU::new(Arc::clone(&rom_rc));
 
         Bus {
             cpu_vram: [0; 2048],
@@ -67,9 +67,9 @@ impl Bus {
             }
 
             // SRAM
-            0x6000..=0x7fff => self.rom.borrow_mut().mapper.read(addr),
+            0x6000..=0x7fff => self.rom.lock().unwrap().mapper.read(addr),
             // 0x8000..=0xFFFF => self.read_prg_rom(addr),
-            0x8000..=0xFFFF => self.rom.borrow_mut().mapper.read(addr),
+            0x8000..=0xFFFF => self.rom.lock().unwrap().mapper.read(addr),
 
             _ => {
                 println!("Ignoring mem access at {:04X}", addr);
@@ -105,9 +105,9 @@ impl Bus {
                 }
             }
             // SRAM
-            0x6000..=0x7fff => self.rom.borrow_mut().mapper.write(addr, data),
+            0x6000..=0x7fff => self.rom.lock().unwrap().mapper.write(addr, data),
             // PRG-ROM
-            0x8000..=0xFFFF => self.rom.borrow_mut().mapper.write(addr, data),
+            0x8000..=0xFFFF => self.rom.lock().unwrap().mapper.write(addr, data),
             _ => {
                 panic!("Ignoring mem write-access at {:04X}", addr);
             }

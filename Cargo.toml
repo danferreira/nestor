@@ -1,3 +1,4 @@
 [workspace]
-members = ["nestor", "nestor-sdl"]
+members = ["nestor", "nestor-desktop", "nestor-sdl"]
 resolver = "2"
+exclude = []
