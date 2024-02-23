@@ -101,7 +101,7 @@ fn main() {
 
     // });
 
-    let mut nes = NES::new(path);
+    let mut nes = NES::new();
 
     'running: loop {
         let frame = nes.emulate_frame();

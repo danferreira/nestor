@@ -71,8 +71,6 @@ impl Rom {
             _ => panic!("Mapper not implement yet {mapper_idx}"),
         };
 
-        // println!("Mirroring: {:?}", mirroring);
-
         Ok(Rom {
             prg_rom,
             chr_rom,
