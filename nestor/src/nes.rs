@@ -1,6 +1,6 @@
 use std::fs;
 
-use crate::{bus::Bus, cartridge::Rom, cpu::CPU, ppu::frame::Frame};
+use crate::{bus::Bus, cartridge::Rom, cpu::CPU, ppu::frame::Frame, JoypadButton};
 
 pub struct NES {
     pub cpu: CPU,
@@ -22,5 +22,9 @@ impl NES {
         let cycles = self.cpu.run();
 
         self.cpu.bus.tick(cycles as u8)
+    }
+
+    pub fn button_pressed(&mut self, key: JoypadButton, pressed: bool) {
+        self.cpu.bus.joypad1.set_button_pressed_status(key, pressed);
     }
 }
