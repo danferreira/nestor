@@ -11,7 +11,7 @@ use crate::{
 
 pub struct Bus {
     cpu_vram: [u8; 2048],
-    rom: Option<Arc<Mutex<Rom>>>,
+    pub rom: Option<Arc<Mutex<Rom>>>,
     pub ppu: PPU,
     pub joypad1: Joypad,
 }
@@ -27,11 +27,9 @@ impl Bus {
         }
     }
 
-    pub fn load_rom(&mut self, rom: Rom) {
-        let rom_rc = Arc::new(Mutex::new(rom));
-
-        self.ppu.load_rom(rom_rc.clone());
-        self.rom = Some(rom_rc);
+    pub fn load_rom(&mut self, rom: Arc<Mutex<Rom>>) {
+        self.ppu.load_rom(rom.clone());
+        self.rom = Some(rom);
     }
 
     pub fn tick(&mut self, cycles: u8) -> Option<&Frame> {
