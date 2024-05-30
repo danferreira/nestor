@@ -57,10 +57,10 @@
             {
                 "label": "main",
                 "fullscreen": false,
-                "height": 600,
-                "resizable": true,
+                "height": 720,
+                "resizable": false,
                 "title": "NEStor - NES Emulator",
-                "width": 800
+                "width": 768
             }
         ]
     }

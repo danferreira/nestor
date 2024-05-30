@@ -838,8 +838,6 @@ impl PPU {
             _ => (),
         }
 
-        // cycle:    0 - 340
-        // scanline: 0 - 261
         self.cycle += 1;
         if self.cycle > 340 {
             self.cycle = 0;

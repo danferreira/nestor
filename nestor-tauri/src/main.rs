@@ -1,14 +1,13 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use std::path::PathBuf;
-use std::sync::{mpsc, Arc, Mutex};
-use std::{thread, time};
+use std::sync::{Arc, Mutex};
 
 use nestor::frame::Frame;
 use nestor::NES;
 use tauri::api::dialog::FileDialogBuilder;
+use tauri::Manager;
 use tauri::{AboutMetadata, CustomMenuItem, Menu, MenuItem, State, Submenu};
-use tauri::{Manager, Window};
 
 struct Emulator(Arc<Mutex<NES>>);
 
@@ -21,54 +20,36 @@ impl Emulator {
 
     fn emulate_frame(&self) -> Option<Frame> {
         let mut emulator = self.0.lock().unwrap();
-        if let Some(frame) = emulator.emulate_frame() {
-            Some(frame.clone())
-        } else {
-            None
+        if emulator.is_running() {
+            if let Some(frame) = emulator.emulate_frame() {
+                return Some(frame.clone());
+            }
         }
+
+        None
     }
 }
 
-#[tauri::command]
-fn start_emulation(state: tauri::State<Emulator>, window: Window) {
-    println!("start_emulation");
+#[tauri::command(async)]
+fn next_frame(state: tauri::State<Emulator>) -> Vec<u8> {
+    let emulator = state;
+    let mut local_buffer: Vec<u8> = vec![];
 
-    let emulator = state.0.clone();
-    let mut frames = 0.0;
-    let mut now = time::Instant::now();
-    // Spawn a new thread for emulation
-    thread::spawn(move || {
-        loop {
-            // Lock the emulator, run one frame of emulation, and immediately unlock
-            let mut emulator = emulator.lock().unwrap();
-            let frame_data = emulator.emulate_frame();
-
-            // Check if there is frame data to send to the UI
-            if let Some(frame) = frame_data {
-                frames += 1.0;
-
-                let elapsed = now.elapsed();
-
-                if elapsed.as_secs_f64() >= 1.0 {
-                    println!("FPS: {}", frames);
-                    frames = 0.0;
-                    now = time::Instant::now();
-                }
-
-                // Send the frame data to the UI thread
-                let mut local_buffer: Vec<u8> = vec![];
-
-                for color in frame.data.chunks_exact(3) {
-                    local_buffer.push(color[0]);
-                    local_buffer.push(color[1]);
-                    local_buffer.push(color[2]);
-                    local_buffer.push(255);
-                }
-
-                window.emit("draw_frame", &local_buffer).unwrap();
+    loop {
+        // Check if there is frame data to return to the UI
+        let frame_data = emulator.emulate_frame();
+        if let Some(frame) = frame_data {
+            for color in frame.data.chunks_exact(3) {
+                local_buffer.push(color[0]);
+                local_buffer.push(color[1]);
+                local_buffer.push(color[2]);
+                local_buffer.push(255);
             }
+
+            break;
         }
-    });
+    }
+    return local_buffer;
 }
 
 fn main() {
@@ -115,22 +96,11 @@ fn main() {
                         let window = event.window();
                         let emulator: State<'_, Emulator> = window.state();
                         emulator.load_rom(file_path);
-                        println!("Emulation ready to start");
-                        window.emit("emulation_ready", "").unwrap();
                     }
                 }),
             _ => {}
         })
-        // .setup(|app| {
-        //     #[cfg(debug_assertions)] // only include this code on debug builds
-        //     {
-        //         let window = app.get_window("main").unwrap();
-        //         window.open_devtools();
-        //         window.close_devtools();
-        //     }
-        //     Ok(())
-        // })
-        .invoke_handler(tauri::generate_handler![start_emulation])
+        .invoke_handler(tauri::generate_handler![next_frame])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
