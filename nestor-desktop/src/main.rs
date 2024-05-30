@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::{mpsc, Arc, Mutex};
-use std::thread;
+use std::{thread, time};
 
 use iced::keyboard::{key, Key};
 use iced::multi_window::Application;
@@ -16,13 +16,25 @@ pub fn main() -> iced::Result {
     let (tx, rx) = mpsc::channel::<Vec<u8>>();
     let nes = Arc::new(Mutex::new(NES::new()));
     let nes_clone = nes.clone();
+    let mut frames = 0.0;
+    let mut now = time::Instant::now();
 
     thread::spawn(move || loop {
         let mut nes_clone = nes_clone.lock().unwrap();
 
         if nes_clone.is_running() {
             let frame = nes_clone.emulate_frame();
+
             if let Some(frame) = frame {
+                frames += 1.0;
+                let elapsed = now.elapsed();
+
+                if elapsed.as_secs_f64() >= 1.0 {
+                    println!("FPS: {}", frames);
+                    frames = 0.0;
+                    now = time::Instant::now();
+                }
+
                 let mut local_buffer: Vec<u8> = vec![];
 
                 for color in frame.data.chunks_exact(3) {
@@ -32,6 +44,7 @@ pub fn main() -> iced::Result {
                     local_buffer.push(255);
                 }
 
+                // thread::sleep(time::Duration::from_millis(10));
                 tx.send(local_buffer).unwrap();
             }
         }
