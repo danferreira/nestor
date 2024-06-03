@@ -15,9 +15,12 @@ ctx.fillStyle = "black"
 ctx.fillRect(0, 0, WIDTH, HEIGHT)
 ctx.imageSmoothingEnabled = false;
 
+var lastCalledTime;
+var counter = 0;
+var fpsArray = [];
 const imageData = ctx.createImageData(WIDTH, HEIGHT);
 
-async function emulate_next_frame() {
+async function emulate_next_frame(timestamp) {
     const data = await invoke('next_frame');
 
     if (data && data.length > 0) {
@@ -28,7 +31,30 @@ async function emulate_next_frame() {
         ctx.drawImage(bitmap, 0, 0, WIDTH, HEIGHT);
     }
 
+    var fps;
+
+    if (!lastCalledTime) {
+        lastCalledTime = new Date().getTime();
+        fps = 0;
+    }
+
+    var delta = (new Date().getTime() - lastCalledTime) / 1000;
+    lastCalledTime = new Date().getTime();
+    fps = Math.ceil((1 / delta));
+
+    if (counter >= 60) {
+        var sum = fpsArray.reduce(function (a, b) { return a + b });
+        var average = Math.ceil(sum / fpsArray.length);
+        console.log(average);
+        counter = 0;
+    } else {
+        if (fps !== Infinity) {
+            fpsArray.push(fps);
+        }
+
+        counter++;
+    }
     requestAnimationFrame(emulate_next_frame);
 }
 
-emulate_next_frame().catch(console.error)
+requestAnimationFrame(emulate_next_frame);
