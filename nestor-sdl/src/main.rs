@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use nestor::JoypadButton;
 use nestor::NES;
 
@@ -22,7 +20,7 @@ fn main() {
     let height = 240;
 
     let window = video_subsystem
-        .window("NEStor", width * 3 as u32, height * 3 as u32)
+        .window("NEStor", width * 3, height * 3)
         .position_centered()
         .build()
         .unwrap();

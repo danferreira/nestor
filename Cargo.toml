@@ -2,3 +2,6 @@
 members = ["nestor", "nestor-browser", "nestor-desktop", "nestor-sdl"]
 resolver = "2"
 exclude = []
+
+[workspace.lints.clippy]
+upper_case_acronyms = "allow"

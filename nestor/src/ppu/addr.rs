@@ -51,3 +51,9 @@ impl AddrRegister {
         ((self.value.0 as u16) << 8) | (self.value.1 as u16)
     }
 }
+
+impl Default for AddrRegister {
+    fn default() -> Self {
+        Self::new()
+    }
+}

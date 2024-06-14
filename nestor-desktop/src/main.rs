@@ -176,17 +176,12 @@ impl multi_window::Application for Emulator {
             key::Key::Character("o") => Some(Message::OpenRom),
             key::Key::Character("p") => Some(Message::OpenWindow(Window::PPUView)),
             key::Key::Character("n") => Some(Message::OpenWindow(Window::NametablesView)),
-            _ => match get_joypad_button(key) {
-                Some(joypad_button) => Some(Message::ButtonPressed(joypad_button)),
-                None => None,
-            },
+            _ => get_joypad_button(key).map(Message::ButtonPressed),
         });
 
-        let key_release_handler =
-            keyboard::on_key_release(|key, _modifiers| match get_joypad_button(key) {
-                Some(joypad_button) => Some(Message::ButtonReleased(joypad_button)),
-                None => None,
-            });
+        let key_release_handler = keyboard::on_key_release(|key, _modifiers| {
+            get_joypad_button(key).map(Message::ButtonReleased)
+        });
 
         let event_listener = event::listen_with(|event, _| {
             if let iced::Event::Window(id, window_event) = event {
@@ -409,15 +404,11 @@ async fn open_rom() -> Option<String> {
         .pick_file()
         .await;
 
-    if let Some(file) = res {
-        Some(
-            file.path()
-                .to_path_buf()
-                .into_os_string()
-                .into_string()
-                .unwrap(),
-        )
-    } else {
-        None
-    }
+    res.map(|file| {
+        file.path()
+            .to_path_buf()
+            .into_os_string()
+            .into_string()
+            .unwrap()
+    })
 }

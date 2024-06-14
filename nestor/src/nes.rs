@@ -39,7 +39,7 @@ impl NES {
     pub fn emulate_frame(&mut self) -> Option<&Frame> {
         let cycles = self.cpu.run();
 
-        self.cpu.bus.tick(cycles as u8)
+        self.cpu.bus.tick(cycles)
     }
 
     pub fn button_pressed(&mut self, key: JoypadButton, pressed: bool) {
@@ -93,7 +93,7 @@ impl NES {
         let mut tile_y = 0;
         let mut tile_x = offset;
 
-        let bank = (bank_index * 0x1000) as usize;
+        let bank = bank_index * 0x1000;
 
         for tile_n in 0..256 {
             if tile_n != 0 && tile_n % 16 == 0 {
@@ -108,8 +108,8 @@ impl NES {
 
                 for x in (0..=7).rev() {
                     let value = (1 & upper) << 1 | (1 & lower);
-                    upper = upper >> 1;
-                    lower = lower >> 1;
+                    upper >>= 1;
+                    lower >>= 1;
 
                     let rgb = match value {
                         0..=3 => palette::SYSTEM_PALETTE[palette[value as usize] as usize],
@@ -204,8 +204,8 @@ impl NES {
                         for x in (0..8).rev() {
                             let value = (lower & 0x01) | ((upper & 0x01) << 1);
 
-                            lower = lower >> 1;
-                            upper = upper >> 1;
+                            lower >>= 1;
+                            upper >>= 1;
 
                             let rgb = match value {
                                 0..=3 => palette::SYSTEM_PALETTE[palette[value as usize] as usize],
@@ -237,5 +237,11 @@ impl NES {
         }
 
         frame
+    }
+}
+
+impl Default for NES {
+    fn default() -> Self {
+        Self::new()
     }
 }

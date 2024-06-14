@@ -472,8 +472,7 @@ impl PPU {
 
         let rgb = palette::SYSTEM_PALETTE[color as usize];
 
-        self.frame
-            .set_pixel(self.cycle - 1, self.scanline as usize, rgb);
+        self.frame.set_pixel(self.cycle - 1, self.scanline, rgb);
     }
 
     fn render_background(&self) -> (u8, u8) {
@@ -755,7 +754,7 @@ impl PPU {
     }
 
     pub fn tick(&mut self) -> bool {
-        let scanline_step = Scanline::from(self.scanline as usize);
+        let scanline_step = Scanline::from(self.scanline);
 
         match (scanline_step, self.cycle) {
             (_, 0) => {
@@ -826,12 +825,10 @@ impl PPU {
                 //Idle. Do nothing
             }
             (Scanline::VBlank, 1) => {
-                if self.scanline == 241 {
-                    if !self.suppress_vbl {
-                        self.status.set_vblank_status(true);
-                        if self.ctrl.generate_vblank_nmi() {
-                            self.nmi_interrupt = Some(1);
-                        }
+                if self.scanline == 241 && !self.suppress_vbl {
+                    self.status.set_vblank_status(true);
+                    if self.ctrl.generate_vblank_nmi() {
+                        self.nmi_interrupt = Some(1);
                     }
                 }
             }
@@ -854,6 +851,12 @@ impl PPU {
             }
         }
 
-        return false;
+        false
+    }
+}
+
+impl Default for PPU {
+    fn default() -> Self {
+        Self::new()
     }
 }

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 pub struct OpCode {
     pub code: u8,
     pub mnemonic: Mnemonic,
-    pub mnemonic_name: &'static str,
+    pub _mnemonic_name: &'static str,
     pub len: u8,
     pub cycles: u8,
     pub mode: AddressingMode,
@@ -12,7 +12,6 @@ pub struct OpCode {
 
 #[derive(Debug)]
 pub enum Mnemonic {
-    INV,
     ADC,
     AHX,
     ALR,
@@ -102,7 +101,7 @@ impl OpCode {
         OpCode {
             code,
             mnemonic,
-            mnemonic_name,
+            _mnemonic_name: mnemonic_name,
             len,
             cycles,
             mode,
@@ -312,7 +311,7 @@ lazy_static! {
         OpCode::new(0xc7, Mnemonic::DCP, "*DCP", 2, 5, AddressingMode::ZeroPage),
         OpCode::new(0xd7, Mnemonic::DCP, "*DCP", 2, 6, AddressingMode::ZeroPageX),
         OpCode::new(0xCF, Mnemonic::DCP, "*DCP", 3, 6, AddressingMode::Absolute),
-        OpCode::new(0xdF, Mnemonic::DCP, "*DCP", 3, 7, AddressingMode::AbsoluteX),
+        OpCode::new(0xDF, Mnemonic::DCP, "*DCP", 3, 7, AddressingMode::AbsoluteX),
         OpCode::new(0xdb, Mnemonic::DCP, "*DCP", 3, 7, AddressingMode::AbsoluteY),
         OpCode::new(0xd3, Mnemonic::DCP, "*DCP", 2, 8, AddressingMode::IndirectY),
         OpCode::new(0xc3, Mnemonic::DCP, "*DCP", 2, 8, AddressingMode::IndirectX),

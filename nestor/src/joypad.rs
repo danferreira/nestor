@@ -50,3 +50,9 @@ impl Joypad {
         self.button_status.set(button, pressed);
     }
 }
+
+impl Default for Joypad {
+    fn default() -> Self {
+        Self::new()
+    }
+}

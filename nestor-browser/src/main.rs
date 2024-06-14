@@ -125,11 +125,7 @@ impl Component for App {
                     onchange={
                         ctx.link().batch_callback(move |event: Event| {
                             let input: HtmlInputElement = event.target_unchecked_into();
-                            if let Some(file) = input.files().map(|list| list.get(0)).flatten() {
-                                Some(Msg::FileUpload(file.into()))
-                            } else {
-                                None
-                            }
+                            input.files().and_then(|list| list.get(0)).map(|file| Msg::FileUpload(file.into()))
                         })
                     }
                 />

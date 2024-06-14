@@ -78,3 +78,9 @@ impl MaskRegister {
         self.bits = data;
     }
 }
+
+impl Default for MaskRegister {
+    fn default() -> Self {
+        Self::new()
+    }
+}
