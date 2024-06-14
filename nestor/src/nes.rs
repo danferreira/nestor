@@ -48,11 +48,8 @@ impl NES {
 
     pub fn load_rom(&mut self, path: String) {
         let game_code = fs::read(path).expect("Should have been able to read the game");
-        let rom = Rom::new(&game_code).unwrap();
 
-        let rom_rc = Arc::new(Mutex::new(rom));
-        self.cpu.bus.load_rom(rom_rc.clone());
-        self.rom = Some(rom_rc);
+        self.load_rom_bytes(game_code);
     }
 
     pub fn load_rom_bytes(&mut self, game_code: Vec<u8>) {

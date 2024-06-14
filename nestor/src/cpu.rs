@@ -966,14 +966,6 @@ impl CPU {
         self.program_counter = self.bus.mem_read_u16(0xFFFA);
     }
 
-    pub fn load(&mut self, program: Vec<u8>) {
-        for i in 0..(program.len() as u16) {
-            self.bus.mem_write(0x8600 + i, program[i as usize]);
-        }
-
-        self.bus.mem_write_u16(0xFFFC, 0x8600);
-    }
-
     pub fn reset(&mut self) {
         self.register_a = 0;
         self.register_x = 0;

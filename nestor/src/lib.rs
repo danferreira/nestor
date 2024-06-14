@@ -2,6 +2,7 @@ mod bus;
 mod cpu;
 mod joypad;
 mod mapper;
+mod mappers;
 mod nes;
 mod opcodes;
 mod ppu;
