@@ -55,6 +55,15 @@ impl NES {
         self.rom = Some(rom_rc);
     }
 
+    pub fn load_rom_bytes(&mut self, game_code: Vec<u8>) {
+        let rom = Rom::new(&game_code).unwrap();
+
+        let rom_rc = Arc::new(Mutex::new(rom));
+        self.cpu.bus.load_rom(rom_rc.clone());
+        self.rom = Some(rom_rc);
+        self.start_emulation();
+    }
+
     pub fn start_emulation(&mut self) {
         self.cpu.reset();
         self.status = EmulationStatus::Running;
