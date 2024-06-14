@@ -5,9 +5,9 @@ use std::{
 
 use crate::{
     bus::Bus,
-    cartridge::{Mirroring, Rom},
     cpu::CPU,
     ppu::{frame::Frame, palette},
+    rom::{Mirroring, Rom},
     JoypadButton,
 };
 

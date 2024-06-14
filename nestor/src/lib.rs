@@ -1,11 +1,11 @@
 mod bus;
-mod cartridge;
 mod cpu;
 mod joypad;
 mod mapper;
 mod nes;
 mod opcodes;
 mod ppu;
+mod rom;
 mod trace;
 
 pub use joypad::JoypadButton;

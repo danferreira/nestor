@@ -9,8 +9,8 @@ mod scroll;
 mod sprite;
 mod status;
 
-use crate::cartridge::{Mirroring, Rom};
 use crate::ppu::frame::Frame;
+use crate::rom::{Mirroring, Rom};
 use addr::AddrRegister;
 use control::ControlRegister;
 use mask::MaskRegister;

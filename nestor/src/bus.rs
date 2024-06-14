@@ -1,12 +1,9 @@
-use std::{
-    borrow::BorrowMut,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use crate::{
-    cartridge::Rom,
     joypad::Joypad,
     ppu::{frame::Frame, PPU},
+    rom::Rom,
 };
 
 pub struct Bus {
