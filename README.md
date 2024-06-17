@@ -52,19 +52,30 @@ NEStor is a NES emulator crafted in Rust for educational and nostalgia purposes.
     - [x] 1p
     - [ ] 2p
 - [ ] APU
-- [ ] Debugger
-    - [x] PPU Viewer
-    - [x] Nametable Viewer
-    - [ ] Improve tracer
-    - [ ] Disassembler
 - [ ] Save/Load state support
-- [ ] Gui
-    - [ ] Proper menus
-    - [ ] FPS display
-    - [ ] Settings
-        - [ ] Video config
-        - [ ] Gamepad config
 - [ ] Frontends
     - [x] Desktop
+        - [ ] Gui
+            - [ ] Proper menus
+            - [ ] Settings
+                - [ ] Video config
+                - [ ] Gamepad config
+        - [ ] Debugger
+            - [x] PPU Viewer
+            - [x] Nametable Viewer
+            - [ ] FPS display
+            - [ ] Improve tracer
+            - [ ] Disassembler
+
     - [ ] Browser (WASM)
-    - [ ] libretro (RetroArch)
+        - [ ] Gui
+            - [ ] Proper menus
+            - [ ] Settings
+                - [ ] Video config
+                - [ ] Gamepad config
+        - [ ] Debugger
+            - [ ] PPU Viewer
+            - [ ] Nametable Viewer
+            - [ ] FPS display
+            - [ ] Improve tracer
+            - [ ] Disassembler

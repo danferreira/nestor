@@ -1172,6 +1172,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fps_counter"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff23a4d90ba4b859f370ee3c12ca3b1ca80d8ee144b279e135f6852cdadd6dd6"
+dependencies = [
+ "instant",
+]
+
+[[package]]
 name = "futures"
 version = "0.3.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2164,6 +2173,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a5bbe824c507c5da5956355e86a746d82e0e1464f65d862cc5e71da70e94b2c"
 dependencies = [
  "cfg-if",
+ "js-sys",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
@@ -2494,6 +2506,7 @@ dependencies = [
 name = "nestor-browser"
 version = "0.1.0"
 dependencies = [
+ "fps_counter",
  "futures",
  "gloo 0.11.0",
  "nestor",
