@@ -1,8 +1,11 @@
 use fps_counter::FPSCounter;
 use yew::prelude::*;
 
-use gloo::{console::info, dialogs::alert, file::File, timers::callback::Interval};
-use nestor::NES;
+use gloo::{
+    console::info, dialogs::alert, events::EventListener, file::File, timers::callback::Interval,
+    utils::document,
+};
+use nestor::{JoypadButton, NES};
 
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, HtmlInputElement, ImageData};
 
@@ -16,6 +19,8 @@ pub enum Msg {
     LoadRom(Vec<u8>),
     Tick,
     FileUpload(File),
+    KeyDown(JoypadButton),
+    KeyUp(JoypadButton),
 }
 
 pub struct App {
@@ -26,9 +31,11 @@ pub struct App {
 
     file_reader: Option<gloo::file::callbacks::FileReader>,
     fps_counter: FPSCounter,
-    // Dropping interval will stop it from ticking.
-    interval: Interval,
+
+    _interval: Interval,
     fps: usize,
+    _key_up_listen: EventListener,
+    _key_down_listen: EventListener,
 }
 
 impl Component for App {
@@ -44,21 +51,72 @@ impl Component for App {
             })
         };
 
+        // Callbacks for key events.
+        let on_key_down = {
+            let link = ctx.link().clone();
+            Callback::from(move |e: KeyboardEvent| {
+                match e.key().as_str() {
+                    "ArrowUp" => link.send_message(Msg::KeyDown(JoypadButton::UP)),
+                    "ArrowDown" => link.send_message(Msg::KeyDown(JoypadButton::DOWN)),
+                    "ArrowLeft" => link.send_message(Msg::KeyDown(JoypadButton::LEFT)),
+                    "ArrowRight" => link.send_message(Msg::KeyDown(JoypadButton::RIGHT)),
+                    "z" => link.send_message(Msg::KeyDown(JoypadButton::BUTTON_A)),
+                    "x" => link.send_message(Msg::KeyDown(JoypadButton::BUTTON_B)),
+                    "Enter" => link.send_message(Msg::KeyDown(JoypadButton::START)),
+                    "Shift" => link.send_message(Msg::KeyDown(JoypadButton::SELECT)),
+                    _ => (),
+                };
+            })
+        };
+
+        let on_key_up = {
+            let link = ctx.link().clone();
+            Callback::from(move |e: KeyboardEvent| {
+                match e.key().as_str() {
+                    "ArrowUp" => link.send_message(Msg::KeyUp(JoypadButton::UP)),
+                    "ArrowDown" => link.send_message(Msg::KeyUp(JoypadButton::DOWN)),
+                    "ArrowLeft" => link.send_message(Msg::KeyUp(JoypadButton::LEFT)),
+                    "ArrowRight" => link.send_message(Msg::KeyUp(JoypadButton::RIGHT)),
+                    "z" => link.send_message(Msg::KeyUp(JoypadButton::BUTTON_A)),
+                    "x" => link.send_message(Msg::KeyUp(JoypadButton::BUTTON_B)),
+                    "Enter" => link.send_message(Msg::KeyUp(JoypadButton::START)),
+                    "Shift" => link.send_message(Msg::KeyUp(JoypadButton::SELECT)),
+                    _ => (),
+                };
+            })
+        };
+
+        // Attach key listeners to document.
+        let doc = document();
+        let key_down = EventListener::new(&doc, "keydown", move |event| {
+            let key_event = event.clone().dyn_into::<KeyboardEvent>().unwrap();
+            if !key_event.repeat() {
+                on_key_down.emit(key_event);
+            }
+        });
+        let key_up = EventListener::new(&doc, "keyup", move |event| {
+            let key_event = event.clone().dyn_into::<KeyboardEvent>().unwrap();
+            if !key_event.repeat() {
+                on_key_up.emit(key_event);
+            }
+        });
+
         Self {
             emulator: NES::new(),
             canvas: NodeRef::default(),
             ctx: None,
             file_reader: None,
-            interval,
+            _interval: interval,
             fps_counter: FPSCounter::default(),
             fps: 0,
+            _key_up_listen: key_up,
+            _key_down_listen: key_down,
         }
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Msg) -> bool {
         match msg {
             Msg::LoadRom(rom) => {
-                // let emulator = self.emulator.lock().unwrap();
                 self.emulator.load_rom_bytes(rom);
                 info!("Rom loaded");
 
@@ -101,6 +159,15 @@ impl Component for App {
                 }
 
                 true
+            }
+            Msg::KeyDown(key) => {
+                self.emulator.button_pressed(key, true);
+                false
+            }
+
+            Msg::KeyUp(key) => {
+                self.emulator.button_pressed(key, false);
+                false
             }
         }
     }
