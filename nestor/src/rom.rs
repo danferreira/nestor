@@ -1,4 +1,5 @@
-use crate::mapper::{Mapper, Mapper0, Mapper3};
+use crate::mapper::Mapper;
+use crate::mappers::{CNROM, NROM};
 
 const NES_TAG: [u8; 4] = [0x4E, 0x45, 0x53, 0x1A];
 const PRG_ROM_PAGE_SIZE: usize = 16384;
@@ -20,8 +21,8 @@ pub struct Rom {
 }
 
 impl Rom {
-    pub fn new(raw: &Vec<u8>) -> Result<Rom, String> {
-        if &raw[0..4] != NES_TAG {
+    pub fn new(raw: &[u8]) -> Result<Rom, String> {
+        if raw[0..4] != NES_TAG {
             return Err("File is not in iNES file format".to_string());
         }
 
@@ -66,8 +67,8 @@ impl Rom {
         let mapper_idx = (raw[7] & 0b1111_0000) | (raw[6] >> 4);
 
         let mapper: Box<dyn Mapper + Send> = match mapper_idx {
-            0 => Box::new(Mapper0::new(prg_rom.clone(), chr_rom.clone())),
-            // 3 => Box::new(Mapper3::new(prg_rom.clone(), chr_rom.clone())),
+            0 => Box::new(NROM::new(prg_rom.clone(), chr_rom.clone())),
+            3 => Box::new(CNROM::new(prg_rom.clone(), chr_rom.clone())),
             _ => panic!("Mapper not implement yet {mapper_idx}"),
         };
 

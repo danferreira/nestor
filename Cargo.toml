@@ -1,4 +1,13 @@
 [workspace]
-members = ["nestor", "nestor-desktop", "nestor-sdl", "nestor-tauri"]
+members = [
+    "nestor",
+    "nestor-browser",
+    "nestor-desktop",
+    "nestor-sdl",
+    "nestor-tauri",
+]
 resolver = "2"
 exclude = []
+
+[workspace.lints.clippy]
+upper_case_acronyms = "allow"

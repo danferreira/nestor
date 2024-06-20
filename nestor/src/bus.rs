@@ -1,9 +1,9 @@
 use std::sync::{Arc, Mutex};
 
 use crate::{
-    cartridge::Rom,
     joypad::Joypad,
     ppu::{frame::Frame, PPU},
+    rom::Rom,
 };
 
 pub struct Bus {
@@ -19,7 +19,7 @@ impl Bus {
         Bus {
             cpu_vram: [0; 2048],
             rom: None,
-            ppu: ppu,
+            ppu,
             joypad1: Joypad::new(),
         }
     }
@@ -121,7 +121,7 @@ impl Bus {
 
     pub fn mem_read_u16(&mut self, pos: u16) -> u16 {
         let lo = self.mem_read(pos);
-        let hi = self.mem_read(pos.wrapping_add(1) as u16);
+        let hi = self.mem_read(pos.wrapping_add(1));
         (hi as u16) << 8 | (lo as u16)
     }
 
@@ -130,5 +130,11 @@ impl Bus {
         let lo = (data & 0xff) as u8;
         self.mem_write(pos, lo);
         self.mem_write(pos + 1, hi);
+    }
+}
+
+impl Default for Bus {
+    fn default() -> Self {
+        Self::new()
     }
 }

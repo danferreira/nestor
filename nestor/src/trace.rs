@@ -10,9 +10,9 @@ lazy_static! {
 }
 
 pub fn trace(cpu: &mut CPU) -> String {
-    let ref opscodes: HashMap<u8, &'static opcodes::OpCode> = *opcodes::OPCODES_MAP;
+    let opscodes: &HashMap<u8, &'static opcodes::OpCode> = &opcodes::OPCODES_MAP;
 
-    let ref non_readable_addr = *NON_READABLE_ADDR;
+    let non_readable_addr = &NON_READABLE_ADDR;
 
     let code = cpu.bus.mem_read(cpu.program_counter);
     let ops = opscodes.get(&code).unwrap();
@@ -38,7 +38,7 @@ pub fn trace(cpu: &mut CPU) -> String {
 
     let tmp = match ops.len {
         1 => match ops.code {
-            0x0a | 0x4a | 0x2a | 0x6a => format!("A "),
+            0x0a | 0x4a | 0x2a | 0x6a => "A ".to_string(),
             _ => String::from(""),
         },
         2 => {
@@ -146,7 +146,7 @@ pub fn trace(cpu: &mut CPU) -> String {
         .join(" ");
     let asm_str = format!(
         "${:04x}: {:8}{: >4} {}",
-        begin, hex_str, ops.mnemonic_name, tmp
+        begin, hex_str, ops._mnemonic_name, tmp
     )
     .trim()
     .to_ascii_uppercase()
