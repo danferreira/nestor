@@ -1,5 +1,3 @@
-use std::borrow::Borrow;
-
 use fps_counter::FPSCounter;
 use yew::prelude::*;
 
@@ -13,9 +11,11 @@ use web_sys::HtmlInputElement;
 use wasm_bindgen::JsCast;
 
 mod display;
+mod nametables;
 mod ppu;
 
 use display::Display;
+use nametables::Nametables;
 use ppu::PPU;
 
 pub enum Msg {
@@ -35,6 +35,7 @@ pub struct App {
     pattern_table_0: Vec<u8>,
     pattern_table_1: Vec<u8>,
     palettes: Vec<u8>,
+    nametables: Vec<u8>,
 
     _interval: Interval,
     fps: usize,
@@ -114,6 +115,7 @@ impl Component for App {
             pattern_table_0: vec![],
             pattern_table_1: vec![],
             palettes: vec![],
+            nametables: vec![],
             _key_up_listen: key_up,
             _key_down_listen: key_down,
             frame: vec![],
@@ -162,6 +164,7 @@ impl Component for App {
                             self.pattern_table_0 = pattern_table_0.to_rgba();
                             self.pattern_table_1 = pattern_table_1.to_rgba();
                             self.palettes = self.emulator.palette_viewer().to_rgba();
+                            self.nametables = self.emulator.nametable_viewer().to_rgba();
 
                             break;
                         }
@@ -207,6 +210,7 @@ impl Component for App {
                 </div>
                 <div class="debugger">
                     <PPU pattern_table_0={self.pattern_table_0.clone()}  pattern_table_1={self.pattern_table_1.clone()} palettes={self.palettes.clone()} />
+                    <Nametables nametables={self.nametables.clone()} />
                 </div>
             </div>
         }
