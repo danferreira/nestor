@@ -20,4 +20,16 @@ impl Frame {
             self.data[base + 2] = rgb.2;
         }
     }
+
+    pub fn to_rgba(&self) -> Vec<u8> {
+        let mut buffer: Vec<u8> = vec![];
+        for color in self.data.chunks_exact(3) {
+            buffer.push(color[0]);
+            buffer.push(color[1]);
+            buffer.push(color[2]);
+            buffer.push(255);
+        }
+
+        buffer
+    }
 }

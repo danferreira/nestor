@@ -1,3 +1,5 @@
+use std::borrow::Borrow;
+
 use fps_counter::FPSCounter;
 use yew::prelude::*;
 
@@ -11,8 +13,10 @@ use web_sys::HtmlInputElement;
 use wasm_bindgen::JsCast;
 
 mod display;
+mod ppu;
 
 use display::Display;
+use ppu::PPU;
 
 pub enum Msg {
     LoadRom(Vec<u8>),
@@ -28,6 +32,9 @@ pub struct App {
     file_reader: Option<gloo::file::callbacks::FileReader>,
     fps_counter: FPSCounter,
     frame: Vec<u8>,
+    pattern_table_0: Vec<u8>,
+    pattern_table_1: Vec<u8>,
+    palettes: Vec<u8>,
 
     _interval: Interval,
     fps: usize,
@@ -104,6 +111,9 @@ impl Component for App {
             _interval: interval,
             fps_counter: FPSCounter::default(),
             fps: 0,
+            pattern_table_0: vec![],
+            pattern_table_1: vec![],
+            palettes: vec![],
             _key_up_listen: key_up,
             _key_down_listen: key_down,
             frame: vec![],
@@ -148,6 +158,11 @@ impl Component for App {
                             self.frame = local_buffer;
                             self.fps = self.fps_counter.tick();
 
+                            let (pattern_table_0, pattern_table_1) = self.emulator.ppu_viewer();
+                            self.pattern_table_0 = pattern_table_0.to_rgba();
+                            self.pattern_table_1 = pattern_table_1.to_rgba();
+                            self.palettes = self.emulator.palette_viewer().to_rgba();
+
                             break;
                         }
                     }
@@ -169,21 +184,30 @@ impl Component for App {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         html! {
-            <div>
-                <Display frame={self.frame.clone()} fps={self.fps.clone()}/>
-                <input
-                    id="file-input"
-                    type="file"
-                    multiple=false
-                    accept=".nes"
-                    onchange={
-                        ctx.link().batch_callback(move |event: Event| {
-                            let input: HtmlInputElement = event.target_unchecked_into();
-                            input.files().and_then(|list| list.get(0)).map(|file| Msg::FileUpload(file.into()))
-                        })
-                    }
-                />
-
+            <div class="main-container">
+                <div class="emulator">
+                    <Display frame={self.frame.clone()} fps={self.fps.clone()}/>
+                    <div class="emulator-controls">
+                        <fieldset>
+                        <legend>{"Actions"}</legend>
+                        <input
+                            id="file-input"
+                            type="file"
+                            multiple=false
+                            accept=".nes"
+                            onchange={
+                                ctx.link().batch_callback(move |event: Event| {
+                                    let input: HtmlInputElement = event.target_unchecked_into();
+                                    input.files().and_then(|list| list.get(0)).map(|file| Msg::FileUpload(file.into()))
+                                })
+                            }
+                        />
+                        </fieldset>
+                    </div>
+                </div>
+                <div class="debugger">
+                    <PPU pattern_table_0={self.pattern_table_0.clone()}  pattern_table_1={self.pattern_table_1.clone()} palettes={self.palettes.clone()} />
+                </div>
             </div>
         }
     }
