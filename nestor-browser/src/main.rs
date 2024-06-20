@@ -2,18 +2,17 @@ use fps_counter::FPSCounter;
 use yew::prelude::*;
 
 use gloo::{
-    console::info, dialogs::alert, events::EventListener, file::File, timers::callback::Interval,
-    utils::document,
+    dialogs::alert, events::EventListener, file::File, timers::callback::Interval, utils::document,
 };
 use nestor::{JoypadButton, NES};
 
-use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, HtmlInputElement, ImageData};
+use web_sys::HtmlInputElement;
 
-use wasm_bindgen::{Clamped, JsCast, JsValue};
+use wasm_bindgen::JsCast;
 
-const WIDTH: u32 = 256;
-const HEIGHT: u32 = 240;
-const SCALE: f64 = 3.0;
+mod display;
+
+use display::Display;
 
 pub enum Msg {
     LoadRom(Vec<u8>),
@@ -24,13 +23,11 @@ pub enum Msg {
 }
 
 pub struct App {
-    // emulator: Arc<Mutex<NES>>,
     emulator: NES,
-    canvas: NodeRef,
-    ctx: Option<CanvasRenderingContext2d>,
 
     file_reader: Option<gloo::file::callbacks::FileReader>,
     fps_counter: FPSCounter,
+    frame: Vec<u8>,
 
     _interval: Interval,
     fps: usize,
@@ -103,14 +100,13 @@ impl Component for App {
 
         Self {
             emulator: NES::new(),
-            canvas: NodeRef::default(),
-            ctx: None,
             file_reader: None,
             _interval: interval,
             fps_counter: FPSCounter::default(),
             fps: 0,
             _key_up_listen: key_up,
             _key_down_listen: key_down,
+            frame: vec![],
         }
     }
 
@@ -118,12 +114,10 @@ impl Component for App {
         match msg {
             Msg::LoadRom(rom) => {
                 self.emulator.load_rom_bytes(rom);
-                info!("Rom loaded");
 
                 true
             }
             Msg::FileUpload(file) => {
-                info!("File Upload");
                 let link = ctx.link().clone();
                 self.file_reader = Some(gloo::file::callbacks::read_as_bytes(
                     &file,
@@ -151,7 +145,8 @@ impl Component for App {
                                 local_buffer.push(255);
                             }
 
-                            self.render_frame(local_buffer);
+                            self.frame = local_buffer;
+                            self.fps = self.fps_counter.tick();
 
                             break;
                         }
@@ -175,12 +170,7 @@ impl Component for App {
     fn view(&self, ctx: &Context<Self>) -> Html {
         html! {
             <div>
-                <canvas
-                    width={(WIDTH * SCALE as u32).to_string()}
-                    height={(HEIGHT * SCALE as u32).to_string()}
-                    ref={self.canvas.clone()}>
-                </canvas>
-                <div>{"FPS: "} {{self.fps}}</div>
+                <Display frame={self.frame.clone()} fps={self.fps.clone()}/>
                 <input
                     id="file-input"
                     type="file"
@@ -193,40 +183,9 @@ impl Component for App {
                         })
                     }
                 />
+
             </div>
         }
-    }
-}
-
-impl App {
-    fn render_frame(&mut self, frame: Vec<u8>) {
-        let canvas = self.canvas.cast::<HtmlCanvasElement>().unwrap();
-        let canvas_ctx = match &self.ctx {
-            Some(canvas_ctx) => canvas_ctx,
-            None => {
-                let canvas_ctx = canvas.get_context("2d").unwrap().unwrap();
-                let canvas_ctx: CanvasRenderingContext2d = canvas_ctx
-                    .dyn_into::<web_sys::CanvasRenderingContext2d>()
-                    .unwrap();
-                canvas_ctx.scale(SCALE, SCALE).unwrap();
-                canvas_ctx.set_fill_style(&JsValue::from("black"));
-                canvas_ctx.set_image_smoothing_enabled(false);
-
-                self.ctx = Some(canvas_ctx);
-                self.ctx.as_ref().unwrap()
-            }
-        };
-
-        let img_data =
-            ImageData::new_with_u8_clamped_array(Clamped(frame.as_slice()), WIDTH).unwrap();
-
-        canvas_ctx.put_image_data(&img_data, 0.0, 0.0).unwrap();
-
-        canvas_ctx
-            .draw_image_with_html_canvas_element(&canvas_ctx.canvas().unwrap(), 0_f64, 0_f64)
-            .unwrap();
-
-        self.fps = self.fps_counter.tick();
     }
 }
 
