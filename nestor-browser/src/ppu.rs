@@ -106,7 +106,7 @@ pub fn ppu(props: &PPUProps) -> Html {
 
         use_effect_with(pattern_table_0, move |pattern_table_0| {
             if let Some(ctx) = ctx_pt0_ref.borrow().as_ref() {
-                if pattern_table_0.len() > 0 {
+                if !pattern_table_0.is_empty() {
                     let img_data = ImageData::new_with_u8_clamped_array(
                         Clamped(pattern_table_0.as_slice()),
                         128,
@@ -127,7 +127,7 @@ pub fn ppu(props: &PPUProps) -> Html {
 
         use_effect_with(pattern_table_1, move |pattern_table_1| {
             if let Some(ctx) = ctx_pt1_ref.borrow().as_ref() {
-                if pattern_table_1.len() > 0 {
+                if !pattern_table_1.is_empty() {
                     let img_data = ImageData::new_with_u8_clamped_array(
                         Clamped(pattern_table_1.as_slice()),
                         128,
@@ -148,7 +148,7 @@ pub fn ppu(props: &PPUProps) -> Html {
 
         use_effect_with(palettes, move |palettes| {
             if let Some(ctx) = ctx_palettes_ref.borrow().as_ref() {
-                if palettes.len() > 0 {
+                if !palettes.is_empty() {
                     let img_data =
                         ImageData::new_with_u8_clamped_array(Clamped(palettes.as_slice()), 256)
                             .unwrap();

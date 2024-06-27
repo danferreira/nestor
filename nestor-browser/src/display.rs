@@ -56,7 +56,7 @@ pub fn display(props: &DisplayProps) -> Html {
 
         use_effect_with(frame, move |frame| {
             if let Some(ctx) = ctx_ref.borrow().as_ref() {
-                if frame.len() > 0 {
+                if !frame.is_empty() {
                     let img_data =
                         ImageData::new_with_u8_clamped_array(Clamped(frame.as_slice()), WIDTH)
                             .unwrap();

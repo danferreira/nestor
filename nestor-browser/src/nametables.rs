@@ -43,7 +43,7 @@ pub fn nametables(props: &NametablesProps) -> Html {
 
         use_effect_with(props, move |props| {
             if let Some(ctx) = ctx_ref.borrow().as_ref() {
-                if props.len() > 0 {
+                if !props.is_empty() {
                     let img_data =
                         ImageData::new_with_u8_clamped_array(Clamped(props.as_slice()), 512)
                             .unwrap();

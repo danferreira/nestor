@@ -12,6 +12,7 @@ use gloo::{
     },
 };
 use nestor::{JoypadButton, NES};
+use std::borrow::Cow;
 use wasm_bindgen::JsCast;
 use web_sys::HtmlInputElement;
 use yew::prelude::*;
@@ -31,62 +32,80 @@ fn joypad_from_key(key: &str) -> Option<JoypadButton> {
     }
 }
 
+#[hook]
+pub fn use_joypad_button<E, F>(event_type: E, callback: F)
+where
+    E: Into<Cow<'static, str>>,
+    F: Fn(JoypadButton) + 'static,
+{
+    #[derive(PartialEq, Clone)]
+    struct EventDependents {
+        event_type: Cow<'static, str>,
+        callback: Callback<JoypadButton>,
+    }
+
+    let deps = EventDependents {
+        event_type: event_type.into(),
+        callback: Callback::from(callback),
+    };
+
+    use_effect_with(deps, |deps| {
+        let EventDependents {
+            event_type,
+            callback,
+        } = deps.clone();
+
+        let document = gloo::utils::document();
+
+        let listener = EventListener::new(&document, event_type, move |e| {
+            let key_event = e.clone().dyn_into::<KeyboardEvent>().unwrap();
+            if let Some(key) = joypad_from_key(key_event.key().as_str()) {
+                callback.emit(key);
+            }
+        });
+
+        move || {
+            drop(listener);
+        }
+    });
+}
+
 #[function_component(App)]
 pub fn app() -> Html {
-    let millis = use_state(|| 0);
-    let frame_buffer = use_state(|| vec![]);
-    let pattern_table_0_buffer = use_state(|| vec![]);
-    let pattern_table_1_buffer = use_state(|| vec![]);
-    let palettes_buffer = use_state(|| vec![]);
-    let nametables_buffer = use_state(|| vec![]);
+    let emulator = use_mut_ref(NES::new);
+    let fps_counter = use_mut_ref(FPSCounter::new);
 
-    let rom_bytes = use_state(|| None);
-    let import_reading = use_state(|| Option::<FileReader>::None);
     let fps = use_state(|| 0);
-
-    let emulator = use_mut_ref(|| NES::new());
-    let fps_counter = use_mut_ref(|| FPSCounter::new());
+    let millis = use_state(|| 0);
+    let frame_buffer = use_state(Vec::new);
+    let pattern_table_0_buffer = use_state(Vec::new);
+    let pattern_table_1_buffer = use_state(Vec::new);
+    let palettes_buffer = use_state(Vec::new);
+    let nametables_buffer = use_state(Vec::new);
+    let import_reading = use_state(|| Option::<FileReader>::None);
 
     {
         let emulator = emulator.clone();
 
-        use_effect_with((), move |_| {
-            // Attach a keydown event listener to the document.
-            let document = gloo::utils::document();
-
-            let listener = EventListener::new(&document, "keydown", move |event| {
-                let key_event = event.clone().dyn_into::<KeyboardEvent>().unwrap();
-                if let Some(key) = joypad_from_key(key_event.key().as_str()) {
-                    emulator.borrow_mut().button_pressed(key, true)
-                }
-            });
-
-            || drop(listener)
-        });
+        use_joypad_button("keydown", move |key| {
+            emulator.borrow_mut().button_pressed(key, true)
+        })
     }
 
     {
         let emulator = emulator.clone();
 
-        use_effect_with((), move |_| {
-            // Attach a keydown event listener to the document.
-            let document = gloo::utils::document();
-
-            let listener = EventListener::new(&document, "keyup", move |event| {
-                let key_event = event.clone().dyn_into::<KeyboardEvent>().unwrap();
-                if let Some(key) = joypad_from_key(key_event.key().as_str()) {
-                    emulator.borrow_mut().button_pressed(key, false)
-                }
-            });
-
-            || drop(listener)
+        use_joypad_button("keyup", move |key| {
+            emulator.borrow_mut().button_pressed(key, false)
         });
     }
 
     // Handle file change event
     let on_file_change = {
-        let rom_bytes = rom_bytes.clone();
         let import_reading = import_reading.clone();
+        let emulator = emulator.clone();
+        let millis = millis.clone();
+
         Callback::from(move |e: Event| {
             let input: HtmlInputElement = e.target_unchecked_into();
 
@@ -94,10 +113,13 @@ pub fn app() -> Html {
                 let file: Blob = files.get(0).unwrap().into();
 
                 import_reading.set(Some(read_as_bytes(&file, {
-                    let rom_bytes = rom_bytes.clone();
+                    let emulator = emulator.clone();
+                    let millis = millis.clone();
+
                     move |bytes| match bytes {
                         Ok(bytes) => {
-                            rom_bytes.set(Some(bytes));
+                            emulator.borrow_mut().load_rom_bytes(bytes.clone());
+                            millis.set(16); // Start the emulator loop
                         }
                         Err(_e) => {
                             info!("Error when reading the file");
@@ -109,26 +131,13 @@ pub fn app() -> Html {
     };
 
     {
-        let rom_bytes = rom_bytes.clone();
-        let emulator = emulator.clone();
-        let millis = millis.clone();
-
-        use_effect_with(rom_bytes, move |rom_bytes| {
-            if let Some(bytes) = &**rom_bytes {
-                emulator.borrow_mut().load_rom_bytes(bytes.clone());
-                millis.set(16); // Start the emulator loop
-            }
-            || ()
-        });
-    }
-
-    {
         let frame_buffer = frame_buffer.clone();
         let pattern_table_0_buffer = pattern_table_0_buffer.clone();
         let pattern_table_1_buffer = pattern_table_1_buffer.clone();
         let palettes_buffer = palettes_buffer.clone();
         let nametables_buffer = nametables_buffer.clone();
         let fps = fps.clone();
+        let emulator = emulator.clone();
 
         use_interval(
             move || {
