@@ -100,13 +100,13 @@ impl NES {
                 tile_y += 8;
                 tile_x = offset;
             }
-            let tile = &chr_rom[(bank + tile_n * 16)..=(bank + tile_n * 16 + 15)];
+            let tile = &chr_rom[(bank + tile_n * 16)..(bank + tile_n * 16 + 16)];
 
-            for y in 0..=7 {
+            for y in 0..8 {
                 let mut upper = tile[y];
                 let mut lower = tile[y + 8];
 
-                for x in (0..=7).rev() {
+                for x in (0..8).rev() {
                     let value = (1 & upper) << 1 | (1 & lower);
                     upper >>= 1;
                     lower >>= 1;
@@ -135,9 +135,10 @@ impl NES {
 
         let mut tile_x = 0;
         for color in self.cpu.bus.ppu.palette_table {
+            let rgb = palette::SYSTEM_PALETTE[color as usize];
             for y in 0..8 {
                 for x in 0..8 {
-                    frame.set_pixel(tile_x + x, y, palette::SYSTEM_PALETTE[color as usize]);
+                    frame.set_pixel(tile_x + x, y, rgb);
                 }
             }
             tile_x += 8;
@@ -145,6 +146,7 @@ impl NES {
 
         frame
     }
+
     fn bg_pallette(
         &self,
         palette_table: &[u8],
@@ -175,64 +177,56 @@ impl NES {
 
         let rom = self.rom.as_ref().unwrap().lock().unwrap();
         let chr_rom = &rom.chr_rom;
+        let ppu_ctrl_bank = self.cpu.bus.ppu.ctrl.bknd_pattern_addr() as usize;
 
-        for _ in 0..2 {
-            for nametable in self.cpu.bus.ppu.vram.chunks(0x400) {
-                let attribute_table = &nametable[0x3c0..0x400];
+        for nametable in self.cpu.bus.ppu.vram.chunks(0x400) {
+            let attribute_table = &nametable[0x3c0..0x400];
 
-                for i in 0..0x3c0 {
-                    let tile_index = nametable[i] as usize;
-                    let bank = self.cpu.bus.ppu.ctrl.bknd_pattern_addr() as usize;
+            for i in 0..0x3c0 {
+                let tile_index = nametable[i] as usize;
+                let tile_block = &chr_rom
+                    [(ppu_ctrl_bank + tile_index * 16)..(ppu_ctrl_bank + tile_index * 16 + 16)];
 
-                    let tile_block =
-                        &chr_rom[(bank + tile_index * 16)..(bank + tile_index * 16 + 16)];
+                let tile_x = i % 32;
+                let tile_y = i / 32;
 
-                    let tile_x = i % 32;
-                    let tile_y = i / 32;
+                let palette = self.bg_pallette(
+                    &self.cpu.bus.ppu.palette_table,
+                    attribute_table,
+                    tile_x,
+                    tile_y,
+                );
 
-                    let palette = self.bg_pallette(
-                        &self.cpu.bus.ppu.palette_table,
-                        attribute_table,
-                        tile_x,
-                        tile_y,
-                    );
+                for y in 0..8 {
+                    let lower = tile_block[y];
+                    let upper = tile_block[y + 8];
 
-                    for y in 0..8 {
-                        let mut lower = tile_block[y];
-                        let mut upper = tile_block[y + 8];
+                    for x in 0..8 {
+                        let value = ((lower >> x) & 0x01) | (((upper >> x) & 0x01) << 1);
 
-                        for x in (0..8).rev() {
-                            let value = (lower & 0x01) | ((upper & 0x01) << 1);
+                        let rgb = match value {
+                            0..=3 => palette::SYSTEM_PALETTE[palette[value as usize] as usize],
+                            _ => panic!("can't be"),
+                        };
 
-                            lower >>= 1;
-                            upper >>= 1;
+                        let x = tile_x * 8 + (7 - x);
+                        let y = tile_y * 8 + y;
 
-                            let rgb = match value {
-                                0..=3 => palette::SYSTEM_PALETTE[palette[value as usize] as usize],
-                                _ => panic!("can't be"),
-                            };
+                        frame.set_pixel(x_offset + x, y_offset + y, rgb);
 
-                            let x = tile_x * 8 + x;
-                            let y = tile_y * 8 + y;
-
-                            frame.set_pixel(x_offset + x, y_offset + y, rgb);
+                        if rom.mirroring == Mirroring::Vertical {
+                            frame.set_pixel(x_offset + x, y_offset + y + 240, rgb);
+                        } else {
+                            frame.set_pixel(x_offset + x + 256, y_offset + y, rgb);
                         }
                     }
-                }
-
-                if rom.mirroring == Mirroring::Vertical {
-                    x_offset = 32 * 8;
-                } else {
-                    y_offset = 32 * 8;
                 }
             }
 
             if rom.mirroring == Mirroring::Vertical {
-                x_offset = 0;
-                y_offset = 32 * 8;
+                x_offset = 256;
             } else {
-                x_offset = 32 * 8;
-                y_offset = 0;
+                y_offset = 240;
             }
         }
 
