@@ -10,6 +10,7 @@ gloo = "0.11.0"
 wasm-bindgen = "0.2.92"
 futures = "0.3.30"
 fps_counter = { version = "3.0.0", features = ["wasm-bindgen"] }
+yew-hooks = "0.3.2"
 
 [dependencies.web-sys]
 version = "0.3.60"
