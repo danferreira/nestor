@@ -75,8 +75,8 @@ pub fn app() -> Html {
     let emulator = use_mut_ref(NES::new);
     let fps_counter = use_mut_ref(FPSCounter::new);
 
-    let fps = use_state(|| 0);
-    let millis = use_state(|| 0);
+    let fps = use_state_eq(|| 0);
+    let millis = use_state_eq(|| 0);
     let frame_buffer = use_state(Vec::new);
     let pattern_table_0_buffer = use_state(Vec::new);
     let pattern_table_1_buffer = use_state(Vec::new);
@@ -132,10 +132,6 @@ pub fn app() -> Html {
 
     {
         let frame_buffer = frame_buffer.clone();
-        let pattern_table_0_buffer = pattern_table_0_buffer.clone();
-        let pattern_table_1_buffer = pattern_table_1_buffer.clone();
-        let palettes_buffer = palettes_buffer.clone();
-        let nametables_buffer = nametables_buffer.clone();
         let fps = fps.clone();
         let emulator = emulator.clone();
 
@@ -155,17 +151,6 @@ pub fn app() -> Html {
                             }
 
                             frame_buffer.set(local_buffer);
-
-                            let (pattern_table_0, pattern_table_1) = emu_mut.ppu_viewer();
-                            pattern_table_0_buffer.set(pattern_table_0.to_rgba());
-                            pattern_table_1_buffer.set(pattern_table_1.to_rgba());
-
-                            let palettes = emu_mut.palette_viewer().to_rgba();
-                            palettes_buffer.set(palettes);
-
-                            let nametables = emu_mut.nametable_viewer().to_rgba();
-                            nametables_buffer.set(nametables);
-
                             fps.set(fps_counter.borrow_mut().tick());
 
                             break;
@@ -174,6 +159,31 @@ pub fn app() -> Html {
                 }
             },
             *millis,
+        );
+    }
+
+    {
+        let emulator = emulator.clone();
+        let pattern_table_0_buffer = pattern_table_0_buffer.clone();
+        let pattern_table_1_buffer = pattern_table_1_buffer.clone();
+        let palettes_buffer = palettes_buffer.clone();
+        let nametables_buffer = nametables_buffer.clone();
+
+        use_interval(
+            move || {
+                if emulator.borrow().is_running() {
+                    let (pattern_table_0, pattern_table_1) = emulator.borrow_mut().ppu_viewer();
+                    pattern_table_0_buffer.set(pattern_table_0.to_rgba());
+                    pattern_table_1_buffer.set(pattern_table_1.to_rgba());
+
+                    let palettes = emulator.borrow_mut().palette_viewer().to_rgba();
+                    palettes_buffer.set(palettes);
+
+                    let nametables = emulator.borrow_mut().nametable_viewer().to_rgba();
+                    nametables_buffer.set(nametables);
+                }
+            },
+            1000,
         );
     }
 
