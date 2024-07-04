@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-iced = { version = "0.12.0", features = ["multi-window", "image"] }
+iced = { git = "https://github.com/iced-rs/iced", features = [
+    "multi-window",
+    "image",
+] }
+iced_aw = { git = "https://github.com/iced-rs/iced_aw", features = ["menu"] }
 nestor = { version = "0.1.0", path = "../nestor" }
 rfd = "0.14.0"
