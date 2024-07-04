@@ -1,5 +1,6 @@
 use std::{
     fs,
+    path::Path,
     sync::{Arc, Mutex},
 };
 
@@ -46,7 +47,7 @@ impl NES {
         self.cpu.bus.joypad1.set_button_pressed_status(key, pressed);
     }
 
-    pub fn load_rom(&mut self, path: String) {
+    pub fn load_rom<P: AsRef<Path>>(&mut self, path: P) {
         let game_code = fs::read(path).expect("Should have been able to read the game");
 
         self.load_rom_bytes(game_code);
