@@ -278,6 +278,13 @@ impl Window for Emulator {
     }
 
     fn view(&self) -> Element<Message> {
+        fn menu_button(
+            label: &str,
+            msg: Message,
+        ) -> button::Button<Message, iced::Theme, iced::Renderer> {
+            button(text(label)).on_press(msg).width(Length::Fill)
+        }
+
         let file_items = menu_items!((menu_button("Open", Message::OpenRom)));
         let debug_items = menu_items!((menu_button("PPU", Message::OpenWindow(View::PPU)))(
             menu_button("Nametables", Message::OpenWindow(View::Nametables))
@@ -447,10 +454,6 @@ impl Window for NametablesWindow {
             .height(Length::Fill)
             .into()
     }
-}
-
-fn menu_button(label: &str, msg: Message) -> button::Button<Message, iced::Theme, iced::Renderer> {
-    button(text(label)).on_press(msg).width(Length::Fill)
 }
 
 async fn open_rom() -> Option<PathBuf> {
