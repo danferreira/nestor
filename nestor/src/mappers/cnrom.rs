@@ -7,10 +7,10 @@ pub struct CNROM {
 }
 
 impl CNROM {
-    pub fn new(prg_rom: Vec<u8>, chr_rom: Vec<u8>) -> Self {
+    pub fn new(prg_rom: &[u8], chr_rom: &[u8]) -> Self {
         Self {
-            prg_rom,
-            chr_rom,
+            prg_rom: prg_rom.to_vec(),
+            chr_rom: chr_rom.to_vec(),
             chr_bank: 0,
         }
     }

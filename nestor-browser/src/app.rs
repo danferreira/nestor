@@ -118,7 +118,7 @@ pub fn app() -> Html {
 
                     move |bytes| match bytes {
                         Ok(bytes) => {
-                            emulator.borrow_mut().load_rom_bytes(bytes.clone());
+                            emulator.borrow_mut().load_rom_bytes(&bytes);
                             millis.set(16); // Start the emulator loop
                         }
                         Err(_e) => {

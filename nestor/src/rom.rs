@@ -67,8 +67,8 @@ impl Rom {
         let mapper_idx = (raw[7] & 0b1111_0000) | (raw[6] >> 4);
 
         let mapper: Box<dyn Mapper + Send> = match mapper_idx {
-            0 => Box::new(NROM::new(prg_rom.clone(), chr_rom.clone())),
-            3 => Box::new(CNROM::new(prg_rom.clone(), chr_rom.clone())),
+            0 => Box::new(NROM::new(&prg_rom, &chr_rom)),
+            3 => Box::new(CNROM::new(&prg_rom, &chr_rom)),
             _ => panic!("Mapper not implement yet {mapper_idx}"),
         };
 

@@ -50,11 +50,11 @@ impl NES {
     pub fn load_rom<P: AsRef<Path>>(&mut self, path: P) {
         let game_code = fs::read(path).expect("Should have been able to read the game");
 
-        self.load_rom_bytes(game_code);
+        self.load_rom_bytes(&game_code);
     }
 
-    pub fn load_rom_bytes(&mut self, game_code: Vec<u8>) {
-        let rom = Rom::new(&game_code).unwrap();
+    pub fn load_rom_bytes(&mut self, game_code: &[u8]) {
+        let rom = Rom::new(game_code).unwrap();
 
         let rom_rc = Arc::new(Mutex::new(rom));
         self.cpu.bus.load_rom(rom_rc.clone());

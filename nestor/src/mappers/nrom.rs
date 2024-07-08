@@ -6,8 +6,11 @@ pub struct NROM {
 }
 
 impl NROM {
-    pub fn new(prg_rom: Vec<u8>, chr_rom: Vec<u8>) -> Self {
-        Self { prg_rom, chr_rom }
+    pub fn new(prg_rom: &[u8], chr_rom: &[u8]) -> Self {
+        Self {
+            prg_rom: prg_rom.to_vec(),
+            chr_rom: chr_rom.to_vec(),
+        }
     }
 }
 
