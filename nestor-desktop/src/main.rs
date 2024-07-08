@@ -12,6 +12,7 @@ use iced_aw::menu_items;
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 use std::sync::{mpsc, Arc, Mutex};
 use std::{thread, time};
 
@@ -36,7 +37,7 @@ fn main() -> iced::Result {
 pub enum Message {
     NewFrame(Vec<u8>),
     OpenRom,
-    RomOpened(Option<String>),
+    RomOpened(Option<PathBuf>),
     ButtonPressed(JoypadButton),
     ButtonReleased(JoypadButton),
     OpenWindow(View),
@@ -452,7 +453,7 @@ fn menu_button(label: &str, msg: Message) -> button::Button<Message, iced::Theme
     button(text(label)).on_press(msg).width(Length::Fill)
 }
 
-async fn open_rom() -> Option<String> {
+async fn open_rom() -> Option<PathBuf> {
     let path = std::env::current_dir().unwrap();
 
     let res = rfd::AsyncFileDialog::new()
@@ -461,11 +462,5 @@ async fn open_rom() -> Option<String> {
         .pick_file()
         .await;
 
-    res.map(|file| {
-        file.path()
-            .to_path_buf()
-            .into_os_string()
-            .into_string()
-            .unwrap()
-    })
+    res.map(|file| file.path().to_path_buf())
 }

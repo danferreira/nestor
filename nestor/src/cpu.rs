@@ -1083,7 +1083,5 @@ impl CPU {
         self.cycles += opcode.cycles as u64;
 
         (self.cycles - start_cycles) as u8
-
-        // self.debug_tests();
     }
 }
