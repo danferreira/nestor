@@ -21,7 +21,7 @@ fn main() -> iced::Result {
     iced::daemon(App::title, App::update, App::view)
         .load(|| {
             window::open(window::Settings::default())
-                .map(|id| Message::WindowOpened(id, View::MainView))
+                .map(|id| Message::WindowOpened(id, View::Main))
         })
         .theme(App::theme)
         .subscription(App::subscription)
@@ -45,10 +45,10 @@ pub enum Message {
 }
 
 #[derive(Debug, Clone)]
-enum View {
-    MainView,
-    PPUView,
-    NametablesView,
+pub enum View {
+    Main,
+    PPU,
+    Nametables,
 }
 
 trait Window {
@@ -89,17 +89,17 @@ impl App {
             .map(move |id| Message::WindowOpened(id, window.clone())),
             Message::WindowOpened(id, window) => {
                 match window {
-                    View::MainView => {
+                    View::Main => {
                         self.windows
                             .insert(id, Box::new(Emulator::new(self.nes.clone())));
                     }
-                    View::PPUView => {
+                    View::PPU => {
                         self.windows
-                            .insert(id, Box::new(PPUView::new(self.nes.clone())));
+                            .insert(id, Box::new(PPUWindow::new(self.nes.clone())));
                     }
-                    View::NametablesView => {
+                    View::Nametables => {
                         self.windows
-                            .insert(id, Box::new(NametablesView::new(self.nes.clone())));
+                            .insert(id, Box::new(NametablesWindow::new(self.nes.clone())));
                     }
                 }
 
@@ -127,11 +127,8 @@ impl App {
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        let mut subscriptions: Vec<Subscription<Message>> = self
-            .windows
-            .iter()
-            .map(|(_id, w)| w.subscription())
-            .collect();
+        let mut subscriptions: Vec<Subscription<Message>> =
+            self.windows.values().map(|w| w.subscription()).collect();
 
         let window_events = window::close_events().map(Message::WindowClosed);
         subscriptions.push(window_events);
@@ -281,8 +278,8 @@ impl Window for Emulator {
 
     fn view(&self) -> Element<Message> {
         let file_items = menu_items!((menu_button("Open", Message::OpenRom)));
-        let debug_items = menu_items!((menu_button("PPU", Message::OpenWindow(View::PPUView)))(
-            menu_button("Nametables", Message::OpenWindow(View::NametablesView))
+        let debug_items = menu_items!((menu_button("PPU", Message::OpenWindow(View::PPU)))(
+            menu_button("Nametables", Message::OpenWindow(View::Nametables))
         ));
 
         let mb = menu_bar!((button("File"), Menu::new(file_items).max_width(180.0))(
@@ -311,19 +308,19 @@ impl Window for Emulator {
     }
 }
 
-struct PPUView {
+struct PPUWindow {
     nes: Arc<Mutex<NES>>,
 }
 
-impl PPUView {
+impl PPUWindow {
     fn new(nes: Arc<Mutex<NES>>) -> Self {
         Self { nes }
     }
 }
 
-impl Window for PPUView {
+impl Window for PPUWindow {
     fn title(&self) -> String {
-        "NEStor - PPU View".into()
+        "NEStor - PPU".into()
     }
 
     fn view(&self) -> Element<Message> {
@@ -414,19 +411,19 @@ impl Window for PPUView {
     }
 }
 
-struct NametablesView {
+struct NametablesWindow {
     nes: Arc<Mutex<NES>>,
 }
 
-impl NametablesView {
+impl NametablesWindow {
     fn new(nes: Arc<Mutex<NES>>) -> Self {
         Self { nes }
     }
 }
 
-impl Window for NametablesView {
+impl Window for NametablesWindow {
     fn title(&self) -> String {
-        "NEStor - Nametable View".into()
+        "NEStor - Nametables".into()
     }
 
     fn view(&self) -> Element<Message> {
