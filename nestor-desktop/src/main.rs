@@ -160,44 +160,44 @@ impl Emulator {
         let mut frames = 0.0;
         let mut now = time::Instant::now();
 
-        let nes_clone = nes.clone();
+        {
+            let nes = nes.clone();
 
-        thread::spawn(move || loop {
-            let mut nes = nes.lock().unwrap();
+            thread::spawn(move || loop {
+                let mut nes = nes.lock().unwrap();
 
-            if nes.is_running() {
-                let frame = nes.emulate_frame();
+                if nes.is_running() {
+                    let frame = nes.emulate_frame();
 
-                if let Some(frame) = frame {
-                    frames += 1.0;
-                    let elapsed = now.elapsed();
+                    if let Some(frame) = frame {
+                        frames += 1.0;
+                        let elapsed = now.elapsed();
 
-                    if elapsed.as_secs_f64() >= 1.0 {
-                        println!("FPS: {}", frames);
-                        frames = 0.0;
-                        now = time::Instant::now();
+                        if elapsed.as_secs_f64() >= 1.0 {
+                            println!("FPS: {}", frames);
+                            frames = 0.0;
+                            now = time::Instant::now();
+                        }
+
+                        let mut local_buffer: Vec<u8> = vec![];
+
+                        for color in frame.data.chunks_exact(3) {
+                            local_buffer.push(color[0]);
+                            local_buffer.push(color[1]);
+                            local_buffer.push(color[2]);
+                            local_buffer.push(255);
+                        }
+
+                        tx.send(local_buffer).unwrap();
                     }
-
-                    let mut local_buffer: Vec<u8> = vec![];
-
-                    for color in frame.data.chunks_exact(3) {
-                        local_buffer.push(color[0]);
-                        local_buffer.push(color[1]);
-                        local_buffer.push(color[2]);
-                        local_buffer.push(255);
-                    }
-
-                    tx.send(local_buffer).unwrap();
                 }
-            }
-        });
-
-        let frame_buffer = vec![0; 256 * 240];
+            });
+        }
 
         Emulator {
-            nes: nes_clone,
+            nes,
             receiver: RefCell::new(Some(rx)),
-            frame_buffer,
+            frame_buffer: Vec::new(),
             is_running: false,
         }
     }
@@ -332,7 +332,7 @@ impl Window for PPUWindow {
     }
 
     fn view(&self) -> Element<Message> {
-        let mut nes = self.nes.lock().unwrap();
+        let nes = self.nes.lock().unwrap();
         let mut pt0_buffer = Vec::new();
         let mut pt1_buffer = Vec::new();
         let mut palette_buffer = Vec::new();
@@ -435,7 +435,7 @@ impl Window for NametablesWindow {
     }
 
     fn view(&self) -> Element<Message> {
-        let mut nes = self.nes.lock().unwrap();
+        let nes = self.nes.lock().unwrap();
         let mut buffer = Vec::new();
 
         if nes.is_running() {

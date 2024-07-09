@@ -82,13 +82,13 @@ impl NES {
         self.status == EmulationStatus::Running
     }
 
-    fn pattern_table(&mut self, bank_index: usize) -> Frame {
+    fn pattern_table(&self, bank_index: usize) -> Frame {
         let mut pattern_table = Frame::new(128, 128);
 
         let palette = &self.cpu.bus.ppu.palette_table[0..4];
 
-        let rom = self.rom.as_mut().unwrap();
-        let chr_rom = &rom.lock().unwrap().chr_rom;
+        let rom = self.rom.as_ref().unwrap().lock().unwrap();
+        let chr_rom = &rom.chr_rom;
 
         let offset = bank_index * 128;
         let mut tile_y = 0;
@@ -127,7 +127,7 @@ impl NES {
         pattern_table
     }
 
-    pub fn ppu_viewer(&mut self) -> (Frame, Frame) {
+    pub fn ppu_viewer(&self) -> (Frame, Frame) {
         (self.pattern_table(0), self.pattern_table(1))
     }
 
@@ -171,7 +171,7 @@ impl NES {
         ]
     }
 
-    pub fn nametable_viewer(&mut self) -> Frame {
+    pub fn nametable_viewer(&self) -> Frame {
         let mut frame = Frame::new(512, 480);
         let mut x_offset = 0;
         let mut y_offset = 0;
