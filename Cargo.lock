@@ -2614,6 +2614,7 @@ dependencies = [
 name = "nestor-desktop"
 version = "0.1.0"
 dependencies = [
+ "fps_counter",
  "iced",
  "iced_aw",
  "nestor",

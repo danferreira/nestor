@@ -1,3 +1,4 @@
+use fps_counter::FPSCounter;
 use iced::keyboard::{key, Key};
 use iced::widget::{button, center, container, horizontal_space, text, Row};
 use iced::widget::{image, Column};
@@ -14,7 +15,7 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{mpsc, Arc, Mutex};
-use std::{thread, time};
+use std::thread;
 
 use nestor::{JoypadButton, NES};
 
@@ -152,13 +153,12 @@ struct Emulator {
     receiver: RefCell<Option<mpsc::Receiver<Vec<u8>>>>,
     frame_buffer: Vec<u8>,
     is_running: bool,
+    fps_counter: FPSCounter,
 }
 
 impl Emulator {
     fn new(nes: Arc<Mutex<NES>>) -> Self {
         let (tx, rx) = mpsc::channel::<Vec<u8>>();
-        let mut frames = 0.0;
-        let mut now = time::Instant::now();
 
         {
             let nes = nes.clone();
@@ -170,25 +170,7 @@ impl Emulator {
                     let frame = nes.emulate_frame();
 
                     if let Some(frame) = frame {
-                        frames += 1.0;
-                        let elapsed = now.elapsed();
-
-                        if elapsed.as_secs_f64() >= 1.0 {
-                            println!("FPS: {}", frames);
-                            frames = 0.0;
-                            now = time::Instant::now();
-                        }
-
-                        let mut local_buffer: Vec<u8> = vec![];
-
-                        for color in frame.data.chunks_exact(3) {
-                            local_buffer.push(color[0]);
-                            local_buffer.push(color[1]);
-                            local_buffer.push(color[2]);
-                            local_buffer.push(255);
-                        }
-
-                        tx.send(local_buffer).unwrap();
+                        tx.send(frame.to_rgba()).unwrap();
                     }
                 }
             });
@@ -199,6 +181,7 @@ impl Emulator {
             receiver: RefCell::new(Some(rx)),
             frame_buffer: Vec::new(),
             is_running: false,
+            fps_counter: FPSCounter::new(),
         }
     }
 }
@@ -235,6 +218,8 @@ impl Window for Emulator {
             }
             Message::NewFrame(frame) => {
                 self.frame_buffer = frame;
+                let fps = self.fps_counter.tick();
+                println!("FPS Counter: {}", fps);
 
                 Task::none()
             }

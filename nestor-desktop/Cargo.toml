@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+fps_counter = "3.0.0"
 iced = { git = "https://github.com/iced-rs/iced", features = [
     "multi-window",
     "image",
