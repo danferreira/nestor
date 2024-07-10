@@ -2,8 +2,7 @@ use fps_counter::FPSCounter;
 use iced::keyboard::{key, Key};
 use iced::widget::{button, center, container, horizontal_space, text, Row};
 use iced::widget::{image, Column};
-use iced::window;
-use iced::Size;
+use iced::{futures, window, Size};
 use iced::{keyboard, Border};
 use iced::{Element, Length, Subscription, Task, Theme};
 use iced_aw::menu::Item;
@@ -21,17 +20,10 @@ use nestor::{JoypadButton, NES};
 
 fn main() -> iced::Result {
     iced::daemon(App::title, App::update, App::view)
-        .load(|| {
-            window::open(window::Settings::default())
-                .map(|id| Message::WindowOpened(id, View::Main))
-        })
         .theme(App::theme)
         .subscription(App::subscription)
         .antialiasing(true)
-        .run_with(|| App {
-            nes: Arc::new(Mutex::new(NES::new())),
-            windows: BTreeMap::new(),
-        })
+        .run_with(App::new)
 }
 
 #[derive(Debug, Clone)]
@@ -71,6 +63,16 @@ struct App {
 }
 
 impl App {
+    fn new() -> (Self, Task<Message>) {
+        (
+            App {
+                nes: Arc::new(Mutex::new(NES::new())),
+                windows: BTreeMap::new(),
+            },
+            window::open(window::Settings::default())
+                .map(|id| Message::WindowOpened(id, View::Main)),
+        )
+    }
     fn title(&self, window: window::Id) -> String {
         self.windows
             .get(&window)
@@ -154,6 +156,7 @@ struct Emulator {
     frame_buffer: Vec<u8>,
     is_running: bool,
     fps_counter: FPSCounter,
+    fps: usize,
 }
 
 impl Emulator {
@@ -182,6 +185,7 @@ impl Emulator {
             frame_buffer: Vec::new(),
             is_running: false,
             fps_counter: FPSCounter::new(),
+            fps: 0,
         }
     }
 }
@@ -218,8 +222,7 @@ impl Window for Emulator {
             }
             Message::NewFrame(frame) => {
                 self.frame_buffer = frame;
-                let fps = self.fps_counter.tick();
-                println!("FPS Counter: {}", fps);
+                self.fps = self.fps_counter.tick();
 
                 Task::none()
             }
@@ -250,14 +253,13 @@ impl Window for Emulator {
             get_joypad_button(key).map(Message::ButtonReleased)
         });
 
-        let frame_handler = iced::subscription::unfold(
-            "new frame",
-            self.receiver.take(),
-            move |mut receiver| async move {
+        let frame_streaming =
+            futures::stream::unfold(self.receiver.take(), move |mut receiver| async {
                 let frame = receiver.as_mut().unwrap().recv().unwrap();
-                (Message::NewFrame(frame), receiver)
-            },
-        );
+                Some((Message::NewFrame(frame), receiver))
+            });
+
+        let frame_handler = Subscription::run_with_id("frames", frame_streaming);
 
         Subscription::batch([key_press_handler, key_release_handler, frame_handler])
     }
@@ -291,7 +293,7 @@ impl Window for Emulator {
                 .height(Length::Fill)
                 .into();
 
-            cols = cols.push(image);
+            cols = cols.push(image).push(text(format!("FPS: {}", self.fps)));
         }
 
         container(cols)
