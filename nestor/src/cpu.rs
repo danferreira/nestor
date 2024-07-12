@@ -977,20 +977,11 @@ impl CPU {
     }
 
     pub fn run(&mut self) -> u8 {
-        self.run_with_callback(|_| {})
-    }
-
-    pub fn run_with_callback<F>(&mut self, mut callback: F) -> u8
-    where
-        F: FnMut(&mut CPU),
-    {
         if self.bus.poll_nmi_status().is_some() {
             self.interrupt_nmi();
         }
 
         let start_cycles = self.cycles;
-
-        callback(self);
 
         let code = self.bus.mem_read(self.program_counter);
         self.program_counter = self.program_counter.wrapping_add(1);

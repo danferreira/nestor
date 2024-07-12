@@ -9,6 +9,7 @@ mod scroll;
 mod sprite;
 mod status;
 
+use crate::mapper::Mapper;
 use crate::ppu::frame::Frame;
 use crate::rom::{Mirroring, Rom};
 use addr::AddrRegister;
@@ -53,7 +54,9 @@ impl Scanline {
 }
 
 pub struct PPU {
-    pub rom: Option<Arc<Mutex<Rom>>>,
+    mapper: Option<Arc<Mutex<Box<dyn Mapper + Send>>>>,
+    mirroring: Option<Mirroring>,
+
     pub vram: [u8; 2 * NAMETABLE_SIZE],
     pub palette_table: [u8; PALETTE_SIZE],
 
@@ -109,7 +112,8 @@ pub struct PPU {
 impl PPU {
     pub fn new() -> Self {
         PPU {
-            rom: None,
+            mapper: None,
+            mirroring: None,
             vram: [0; 2 * NAMETABLE_SIZE],
             oam_data: [0xFF; OAM_SIZE],
             oam_addr: 0,
@@ -157,8 +161,9 @@ impl PPU {
         }
     }
 
-    pub fn load_rom(&mut self, rom: Arc<Mutex<Rom>>) {
-        self.rom = Some(rom);
+    pub fn load_rom(&mut self, rom: &Rom) {
+        self.mirroring = Some(rom.mirroring.clone());
+        self.mapper = Some(Arc::clone(&rom.mapper));
     }
 
     fn increment_vram_addr(&mut self) {
@@ -555,13 +560,14 @@ impl PPU {
     fn mirror_nametable(&self, addr: u16) -> u16 {
         let mirrored_vram = addr & 0x0FFF;
         let nametable_index = mirrored_vram / 0x400;
-        match (
-            &self.rom.as_ref().unwrap().lock().unwrap().mirroring,
-            nametable_index,
-        ) {
-            (Mirroring::Vertical, 2) | (Mirroring::Vertical, 3) => mirrored_vram - 0x800,
-            (Mirroring::Horizontal, 1) | (Mirroring::Horizontal, 2) => mirrored_vram - 0x400,
-            (Mirroring::Horizontal, 3) => mirrored_vram - 0x800,
+        match (self.mirroring.clone(), nametable_index) {
+            (Some(Mirroring::Vertical), 2) | (Some(Mirroring::Vertical), 3) => {
+                mirrored_vram - 0x800
+            }
+            (Some(Mirroring::Horizontal), 1) | (Some(Mirroring::Horizontal), 2) => {
+                mirrored_vram - 0x400
+            }
+            (Some(Mirroring::Horizontal), 3) => mirrored_vram - 0x800,
             _ => mirrored_vram,
         }
     }
@@ -577,14 +583,7 @@ impl PPU {
 
     fn mem_read(&self, address: u16) -> u8 {
         match address {
-            0..=0x1fff => self
-                .rom
-                .as_ref()
-                .unwrap()
-                .lock()
-                .unwrap()
-                .mapper
-                .read(address),
+            0..=0x1fff => self.mapper.as_ref().unwrap().lock().unwrap().read(address),
             0x2000..=0x3eff => self.vram[self.mirror_nametable(address) as usize],
             0x3f00..=0x3fff => self.palette_table[self.mirror_palette(address)],
             _ => panic!("unexpected access to mirrored space {}", address),
@@ -594,12 +593,11 @@ impl PPU {
     fn mem_write(&mut self, address: u16, data: u8) {
         match address {
             0..=0x1fff => self
-                .rom
+                .mapper
                 .as_ref()
                 .unwrap()
                 .lock()
                 .unwrap()
-                .mapper
                 .write(address, data),
             0x2000..=0x2fff => self.vram[self.mirror_nametable(address) as usize] = data,
             0x3000..=0x3eff => {

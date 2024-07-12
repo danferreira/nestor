@@ -1,16 +1,18 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use std::sync::Mutex;
 
 use crate::{
     joypad::Joypad,
+    mapper::Mapper,
     ppu::{frame::Frame, PPU},
     rom::Rom,
 };
 
 pub struct Bus {
     cpu_vram: [u8; 2048],
-    pub rom: Option<Arc<Mutex<Rom>>>,
     pub ppu: PPU,
     pub joypad1: Joypad,
+    mapper: Option<Arc<Mutex<Box<dyn Mapper + Send>>>>,
 }
 
 impl Bus {
@@ -18,15 +20,15 @@ impl Bus {
         let ppu = PPU::new();
         Bus {
             cpu_vram: [0; 2048],
-            rom: None,
             ppu,
             joypad1: Joypad::new(),
+            mapper: None,
         }
     }
 
-    pub fn load_rom(&mut self, rom: Arc<Mutex<Rom>>) {
-        self.ppu.load_rom(rom.clone());
-        self.rom = Some(rom);
+    pub fn load_rom(&mut self, rom: &Rom) {
+        self.ppu.load_rom(rom);
+        self.mapper = Some(Arc::clone(&rom.mapper));
     }
 
     pub fn tick(&mut self, cycles: u8) -> Option<&Frame> {
@@ -51,7 +53,7 @@ impl Bus {
     }
 
     pub fn mem_read(&mut self, addr: u16) -> u8 {
-        let rom = self.rom.as_mut().unwrap();
+        // let rom = self.rom.as_mut().unwrap();
         match addr {
             0x0000..=0x1FFF => {
                 let mirror_down_addr = addr & 0b00000111_11111111;
@@ -71,9 +73,8 @@ impl Bus {
             }
 
             // SRAM
-            0x6000..=0x7fff => rom.lock().unwrap().mapper.read(addr),
-            // 0x8000..=0xFFFF => self.read_prg_rom(addr),
-            0x8000..=0xFFFF => rom.lock().unwrap().mapper.read(addr),
+            0x6000..=0x7fff => self.mapper.as_ref().unwrap().lock().unwrap().read(addr),
+            0x8000..=0xFFFF => self.mapper.as_ref().unwrap().lock().unwrap().read(addr),
 
             _ => {
                 println!("Ignoring mem access at {:04X}", addr);
@@ -83,7 +84,7 @@ impl Bus {
     }
 
     pub fn mem_write(&mut self, addr: u16, data: u8) {
-        let rom = self.rom.as_mut().unwrap();
+        // let rom = self.rom.as_mut().unwrap();
         match addr {
             0x0000..=0x1FFF => {
                 let mirror_down_addr = addr & 0b11111111111;
@@ -110,9 +111,22 @@ impl Bus {
                 }
             }
             // SRAM
-            0x6000..=0x7fff => rom.lock().unwrap().mapper.write(addr, data),
+            0x6000..=0x7fff => {
+                self.mapper
+                    .as_ref()
+                    .unwrap()
+                    .lock()
+                    .unwrap()
+                    .write(addr, data);
+            }
             // PRG-ROM
-            0x8000..=0xFFFF => rom.lock().unwrap().mapper.write(addr, data),
+            0x8000..=0xFFFF => self
+                .mapper
+                .as_ref()
+                .unwrap()
+                .lock()
+                .unwrap()
+                .write(addr, data),
             _ => {
                 panic!("Ignoring mem write-access at {:04X}", addr);
             }

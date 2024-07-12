@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::cpu::AddressingMode;
 use crate::cpu::CPU;
 use crate::opcodes;

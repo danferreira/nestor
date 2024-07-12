@@ -1,8 +1,4 @@
-use std::{
-    fs,
-    path::Path,
-    sync::{Arc, Mutex},
-};
+use std::{fs, path::Path};
 
 use crate::{
     bus::Bus,
@@ -21,7 +17,7 @@ pub enum EmulationStatus {
 
 pub struct NES {
     pub cpu: CPU,
-    pub rom: Option<Arc<Mutex<Rom>>>,
+    pub rom: Option<Rom>,
     pub status: EmulationStatus,
 }
 
@@ -56,9 +52,9 @@ impl NES {
     pub fn load_rom_bytes(&mut self, game_code: &[u8]) {
         let rom = Rom::new(game_code).unwrap();
 
-        let rom_rc = Arc::new(Mutex::new(rom));
-        self.cpu.bus.load_rom(rom_rc.clone());
-        self.rom = Some(rom_rc);
+        self.cpu.bus.load_rom(&rom);
+
+        self.rom = Some(rom);
         self.start_emulation();
     }
 
@@ -87,7 +83,7 @@ impl NES {
 
         let palette = &self.cpu.bus.ppu.palette_table[0..4];
 
-        let rom = self.rom.as_ref().unwrap().lock().unwrap();
+        let rom = self.rom.as_ref().unwrap();
         let chr_rom = &rom.chr_rom;
 
         let offset = bank_index * 128;
@@ -176,15 +172,16 @@ impl NES {
         let mut x_offset = 0;
         let mut y_offset = 0;
 
-        let rom = self.rom.as_ref().unwrap().lock().unwrap();
+        // let rom = self.rom.as_ref().unwrap().lock().unwrap();
+        let rom = self.rom.as_ref().unwrap();
         let chr_rom = &rom.chr_rom;
         let ppu_ctrl_bank = self.cpu.bus.ppu.ctrl.bknd_pattern_addr() as usize;
 
         for nametable in self.cpu.bus.ppu.vram.chunks(0x400) {
             let attribute_table = &nametable[0x3c0..0x400];
 
-            for i in 0..0x3c0 {
-                let tile_index = nametable[i] as usize;
+            for (i, tile_index) in nametable.iter().enumerate().take(0x3c0) {
+                let tile_index = *tile_index as usize;
                 let tile_block = &chr_rom
                     [(ppu_ctrl_bank + tile_index * 16)..(ppu_ctrl_bank + tile_index * 16 + 16)];
 
