@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
-use nestor::{JoypadButton, NES};
+use nestor::{JoypadButton, PlayerJoypad, NES};
 
 fn main() -> iced::Result {
     iced::daemon(App::title, App::update, App::view)
@@ -31,8 +31,7 @@ pub enum Message {
     NewFrame(Vec<u8>),
     OpenRom,
     RomOpened(Option<PathBuf>),
-    ButtonPressed(JoypadButton),
-    ButtonReleased(JoypadButton),
+    ButtonPressed(PlayerJoypad, JoypadButton, bool),
     OpenWindow(View),
     WindowOpened(window::Id, View),
     WindowClosed(window::Id),
@@ -212,12 +211,11 @@ impl Window for Emulator {
 
                 Task::none()
             }
-            Message::ButtonPressed(button) => {
-                self.nes.lock().unwrap().button_pressed(button, true);
-                Task::none()
-            }
-            Message::ButtonReleased(button) => {
-                self.nes.lock().unwrap().button_pressed(button, false);
+            Message::ButtonPressed(player, button, pressed) => {
+                self.nes
+                    .lock()
+                    .unwrap()
+                    .button_pressed(player, button, pressed);
                 Task::none()
             }
             Message::NewFrame(frame) => {
@@ -231,26 +229,51 @@ impl Window for Emulator {
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        fn get_joypad_button(key: Key) -> Option<JoypadButton> {
-            match key.as_ref() {
-                Key::Named(key::Named::ArrowDown) => Some(JoypadButton::DOWN),
+        fn get_joypad_button(key: &Key) -> Option<(PlayerJoypad, JoypadButton)> {
+            let player_one = match key.as_ref() {
+                keyboard::Key::Character("w") => Some(JoypadButton::UP),
+                keyboard::Key::Character("s") => Some(JoypadButton::DOWN),
+                keyboard::Key::Character("a") => Some(JoypadButton::LEFT),
+                keyboard::Key::Character("d") => Some(JoypadButton::RIGHT),
+                keyboard::Key::Character("q") => Some(JoypadButton::SELECT),
+                keyboard::Key::Character("e") => Some(JoypadButton::START),
+                keyboard::Key::Character("f") => Some(JoypadButton::BUTTON_A),
+                keyboard::Key::Character("g") => Some(JoypadButton::BUTTON_B),
+                _ => None,
+            };
+
+            if let Some(button) = player_one {
+                return Some((PlayerJoypad::One, button));
+            }
+
+            let player_two = match key.as_ref() {
                 Key::Named(key::Named::ArrowUp) => Some(JoypadButton::UP),
-                Key::Named(key::Named::ArrowRight) => Some(JoypadButton::RIGHT),
+                Key::Named(key::Named::ArrowDown) => Some(JoypadButton::DOWN),
                 Key::Named(key::Named::ArrowLeft) => Some(JoypadButton::LEFT),
+                Key::Named(key::Named::ArrowRight) => Some(JoypadButton::RIGHT),
                 Key::Named(key::Named::Space) => Some(JoypadButton::SELECT),
                 Key::Named(key::Named::Enter) => Some(JoypadButton::START),
-                keyboard::Key::Character("a") => Some(JoypadButton::BUTTON_A),
-                keyboard::Key::Character("s") => Some(JoypadButton::BUTTON_B),
+                Key::Character("k") => Some(JoypadButton::BUTTON_A),
+                Key::Character("l") => Some(JoypadButton::BUTTON_B),
                 _ => None,
+            };
+
+            if let Some(button) = player_two {
+                return Some((PlayerJoypad::Two, button));
             }
+
+            None
         }
 
         let key_press_handler = keyboard::on_key_press(|key, _modifiers| {
             get_joypad_button(key).map(Message::ButtonPressed)
+            get_joypad_button(&key)
+                .map(|(player, button)| Message::ButtonPressed(player, button, true))
         });
 
         let key_release_handler = keyboard::on_key_release(|key, _modifiers| {
-            get_joypad_button(key).map(Message::ButtonReleased)
+            get_joypad_button(&key)
+                .map(|(player, button)| Message::ButtonPressed(player, button, false))
         });
 
         let frame_streaming =

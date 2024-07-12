@@ -15,6 +15,12 @@ pub enum EmulationStatus {
     Paused,
 }
 
+#[derive(Clone, Debug)]
+pub enum PlayerJoypad {
+    One,
+    Two,
+}
+
 pub struct NES {
     pub cpu: CPU,
     pub rom: Option<Rom>,
@@ -39,8 +45,11 @@ impl NES {
         self.cpu.bus.tick(cycles)
     }
 
-    pub fn button_pressed(&mut self, key: JoypadButton, pressed: bool) {
-        self.cpu.bus.joypad1.set_button_pressed_status(key, pressed);
+    pub fn button_pressed(&mut self, player: PlayerJoypad, key: JoypadButton, pressed: bool) {
+        match player {
+            PlayerJoypad::One => self.cpu.bus.joypad1.set_button_pressed_status(key, pressed),
+            PlayerJoypad::Two => self.cpu.bus.joypad2.set_button_pressed_status(key, pressed),
+        }
     }
 
     pub fn load_rom<P: AsRef<Path>>(&mut self, path: P) {

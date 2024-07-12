@@ -11,7 +11,7 @@ use gloo::{
         Blob,
     },
 };
-use nestor::{JoypadButton, NES};
+use nestor::{JoypadButton, PlayerJoypad, NES};
 use std::borrow::Cow;
 use wasm_bindgen::JsCast;
 use web_sys::HtmlInputElement;
@@ -88,7 +88,9 @@ pub fn app() -> Html {
         let emulator = emulator.clone();
 
         use_joypad_button("keydown", move |key| {
-            emulator.borrow_mut().button_pressed(key, true)
+            emulator
+                .borrow_mut()
+                .button_pressed(PlayerJoypad::One, key, true)
         })
     }
 
@@ -96,7 +98,9 @@ pub fn app() -> Html {
         let emulator = emulator.clone();
 
         use_joypad_button("keyup", move |key| {
-            emulator.borrow_mut().button_pressed(key, false)
+            emulator
+                .borrow_mut()
+                .button_pressed(PlayerJoypad::One, key, false)
         });
     }
 

@@ -12,6 +12,7 @@ pub struct Bus {
     cpu_vram: [u8; 2048],
     pub ppu: PPU,
     pub joypad1: Joypad,
+    pub joypad2: Joypad,
     mapper: Option<Arc<Mutex<Box<dyn Mapper + Send>>>>,
 }
 
@@ -22,6 +23,7 @@ impl Bus {
             cpu_vram: [0; 2048],
             ppu,
             joypad1: Joypad::new(),
+            joypad2: Joypad::new(),
             mapper: None,
         }
     }
@@ -53,7 +55,6 @@ impl Bus {
     }
 
     pub fn mem_read(&mut self, addr: u16) -> u8 {
-        // let rom = self.rom.as_mut().unwrap();
         match addr {
             0x0000..=0x1FFF => {
                 let mirror_down_addr = addr & 0b00000111_11111111;
@@ -66,11 +67,7 @@ impl Bus {
             }
 
             0x4016 => self.joypad1.read(),
-
-            0x4017 => {
-                // ignore joypad 2
-                0
-            }
+            0x4017 => self.joypad2.read(),
 
             // SRAM
             0x6000..=0x7fff => self.mapper.as_ref().unwrap().lock().unwrap().read(addr),
@@ -84,7 +81,6 @@ impl Bus {
     }
 
     pub fn mem_write(&mut self, addr: u16, data: u8) {
-        // let rom = self.rom.as_mut().unwrap();
         match addr {
             0x0000..=0x1FFF => {
                 let mirror_down_addr = addr & 0b11111111111;
@@ -97,10 +93,10 @@ impl Bus {
 
             0x4016 => {
                 self.joypad1.write(data);
+                self.joypad2.write(data);
             }
-
             0x4017 => {
-                // ignore joypad 2
+                //ignore for now
             }
             0x4014 => {
                 let hi: u16 = (data as u16) << 8;

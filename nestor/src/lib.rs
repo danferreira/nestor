@@ -10,6 +10,7 @@ mod rom;
 mod trace;
 
 pub use joypad::JoypadButton;
+pub use nes::PlayerJoypad;
 pub use nes::NES;
 pub use ppu::frame;
 
