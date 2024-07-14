@@ -37,7 +37,7 @@ pub enum Message {
     Dummy,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum View {
     Main,
     PPU,
@@ -58,7 +58,7 @@ trait Window {
 #[derive(Default)]
 struct App {
     nes: Arc<Mutex<NES>>,
-    windows: BTreeMap<window::Id, Box<dyn Window>>,
+    windows: BTreeMap<window::Id, (View, Box<dyn Window>)>,
 }
 
 impl App {
@@ -75,7 +75,7 @@ impl App {
     fn title(&self, window: window::Id) -> String {
         self.windows
             .get(&window)
-            .map(|window| window.title())
+            .map(|(_, w)| w.title())
             .unwrap_or_default()
     }
 
@@ -85,43 +85,41 @@ impl App {
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::OpenWindow(window) => window::open(window::Settings {
-                size: Size::new(800.0, 400.0),
-                ..Default::default()
-            })
-            .map(move |id| Message::WindowOpened(id, window.clone())),
-            Message::WindowOpened(id, window) => {
-                match window {
-                    View::Main => {
-                        self.windows
-                            .insert(id, Box::new(Emulator::new(self.nes.clone())));
-                    }
-                    View::PPU => {
-                        self.windows
-                            .insert(id, Box::new(PPUWindow::new(self.nes.clone())));
-                    }
-                    View::Nametables => {
-                        self.windows
-                            .insert(id, Box::new(NametablesWindow::new(self.nes.clone())));
-                    }
+            Message::OpenWindow(view) => {
+                if let Some((id, _)) = self.windows.iter().find(|(_, (v, _))| *v == view) {
+                    return window::gain_focus(*id);
                 }
+
+                window::open(window::Settings {
+                    size: Size::new(800.0, 400.0),
+                    ..Default::default()
+                })
+                .map(move |id| Message::WindowOpened(id, view.clone()))
+            }
+            Message::WindowOpened(id, view) => {
+                let window: Box<dyn Window> = match view {
+                    View::Main => Box::new(Emulator::new(self.nes.clone())),
+                    View::PPU => Box::new(PPUWindow::new(self.nes.clone())),
+                    View::Nametables => Box::new(NametablesWindow::new(self.nes.clone())),
+                };
+                self.windows.insert(id, (view, window));
 
                 Task::none()
             }
             Message::WindowClosed(id) => {
+                if let Some((View::Main, _w)) = self.windows.get(&id) {
+                    return iced::exit();
+                }
+
                 self.windows.remove(&id);
 
-                if self.windows.is_empty() {
-                    iced::exit()
-                } else {
-                    Task::none()
-                }
+                Task::none()
             }
             m => {
                 let tasks: Vec<Task<Message>> = self
                     .windows
                     .iter_mut()
-                    .map(|(_id, w)| w.update(m.clone()))
+                    .map(|(_id, (_, w))| w.update(m.clone()))
                     .collect();
 
                 Task::batch(tasks)
@@ -130,8 +128,11 @@ impl App {
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        let mut subscriptions: Vec<Subscription<Message>> =
-            self.windows.values().map(|w| w.subscription()).collect();
+        let mut subscriptions: Vec<Subscription<Message>> = self
+            .windows
+            .values()
+            .map(|(_, w)| w.subscription())
+            .collect();
 
         let window_events = window::close_events().map(Message::WindowClosed);
         subscriptions.push(window_events);
@@ -140,7 +141,7 @@ impl App {
     }
 
     fn view(&self, window_id: window::Id) -> Element<Message> {
-        if let Some(window) = self.windows.get(&window_id) {
+        if let Some((_, window)) = self.windows.get(&window_id) {
             center(window.view()).into()
         } else {
             horizontal_space().into()
