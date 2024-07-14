@@ -24,18 +24,18 @@ NEStor is a NES emulator crafted in Rust for educational and nostalgia purposes.
 
 ### TODO
 
-- [ ] CPU
+- [x] CPU
     - [x] Official Instructions
     - [x] Unnoficial Instructions
     - [x] Addressing Modes
-    - [ ] Interrupts
+    - [x] Interrupts
 - [ ] ROM
     - [x] Load rom
     - [ ] Mappers
         - [x] NROM
+        - [x] CNROM
         - [ ] MMC1
         - [ ] UxROM
-        - [ ] CNROM
         - [ ] MMC3
 - [ ] PPU
     - [x] Registers
@@ -48,9 +48,9 @@ NEStor is a NES emulator crafted in Rust for educational and nostalgia purposes.
         - [x] NTSC
         - [ ] PAL
         - [ ] Dendy
-- [ ] Gamepad
+- [x] Gamepad
     - [x] 1p
-    - [ ] 2p
+    - [x] 2p
 - [ ] APU
 - [ ] Save/Load state support
 - [ ] Frontends
@@ -74,8 +74,8 @@ NEStor is a NES emulator crafted in Rust for educational and nostalgia purposes.
                 - [ ] Video config
                 - [ ] Gamepad config
         - [ ] Debugger
-            - [ ] PPU Viewer
-            - [ ] Nametable Viewer
-            - [ ] FPS display
+            - [x] PPU Viewer
+            - [x] Nametable Viewer
+            - [x] FPS display
             - [ ] Improve tracer
             - [ ] Disassembler
