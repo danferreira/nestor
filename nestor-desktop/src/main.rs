@@ -1,14 +1,11 @@
 use fps_counter::FPSCounter;
 use iced::keyboard::{key, Key};
-use iced::widget::{button, center, container, horizontal_space, text, Row};
+use iced::widget::{center, container, horizontal_space, text, Row};
 use iced::widget::{image, Column};
 use iced::{futures, window, Size};
 use iced::{keyboard, Border};
 use iced::{Element, Length, Subscription, Task, Theme};
-use iced_aw::menu::Item;
-use iced_aw::menu::Menu;
-use iced_aw::menu_bar;
-use iced_aw::menu_items;
+use menu::{menu_bar, Menu};
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -17,6 +14,8 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
 use nestor::{JoypadButton, PlayerJoypad, NES};
+
+mod menu;
 
 fn main() -> iced::Result {
     iced::daemon(App::title, App::update, App::view)
@@ -35,6 +34,7 @@ pub enum Message {
     OpenWindow(View),
     WindowOpened(window::Id, View),
     WindowClosed(window::Id),
+    Dummy,
 }
 
 #[derive(Debug, Clone)]
@@ -266,7 +266,6 @@ impl Window for Emulator {
         }
 
         let key_press_handler = keyboard::on_key_press(|key, _modifiers| {
-            get_joypad_button(key).map(Message::ButtonPressed)
             get_joypad_button(&key)
                 .map(|(player, button)| Message::ButtonPressed(player, button, true))
         });
@@ -288,22 +287,13 @@ impl Window for Emulator {
     }
 
     fn view(&self) -> Element<Message> {
-        fn menu_button(
-            label: &str,
-            msg: Message,
-        ) -> button::Button<Message, iced::Theme, iced::Renderer> {
-            button(text(label)).on_press(msg).width(Length::Fill)
-        }
+        let file_menu = Menu::new("File").item("Open", Message::OpenRom).build();
+        let debugger_menu = Menu::new("Debugger")
+            .item("PPU", Message::OpenWindow(View::PPU))
+            .item("Nametables", Message::OpenWindow(View::Nametables))
+            .build();
 
-        let file_items = menu_items!((menu_button("Open", Message::OpenRom)));
-        let debug_items = menu_items!((menu_button("PPU", Message::OpenWindow(View::PPU)))(
-            menu_button("Nametables", Message::OpenWindow(View::Nametables))
-        ));
-
-        let mb = menu_bar!((button("File"), Menu::new(file_items).max_width(180.0))(
-            button("Debugger"),
-            Menu::new(debug_items).max_width(180.0)
-        ));
+        let mb = menu_bar(vec![file_menu, debugger_menu]);
 
         let mut cols = Column::new().push(mb);
 
