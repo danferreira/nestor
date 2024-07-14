@@ -5,7 +5,7 @@ use crate::{
     joypad::Joypad,
     mapper::Mapper,
     ppu::{frame::Frame, PPU},
-    rom::Rom,
+    rom::ROM,
 };
 
 pub struct Bus {
@@ -28,7 +28,7 @@ impl Bus {
         }
     }
 
-    pub fn load_rom(&mut self, rom: &Rom) {
+    pub fn load_rom(&mut self, rom: &ROM) {
         self.ppu.load_rom(rom);
         self.mapper = Some(Arc::clone(&rom.mapper));
     }

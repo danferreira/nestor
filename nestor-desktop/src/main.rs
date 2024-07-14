@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
-use nestor::{JoypadButton, PlayerJoypad, NES};
+use nestor::{JoypadButton, PlayerJoypad, NES, ROM};
 
 mod menu;
 
@@ -202,9 +202,13 @@ impl Window for Emulator {
             }
             Message::RomOpened(result) => {
                 if let Some(path) = result {
-                    self.nes.lock().unwrap().load_rom(path);
-                    self.nes.lock().unwrap().start_emulation();
-                    self.is_running = true;
+                    match ROM::from_path(path) {
+                        Ok(rom) => {
+                            self.nes.lock().unwrap().insert_cartridge(rom);
+                            self.is_running = true;
+                        }
+                        Err(error) => panic!("Failed on loading the rom: {error}"),
+                    }
                 } else {
                     self.nes.lock().unwrap().continue_emulation();
                 }

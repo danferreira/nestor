@@ -13,6 +13,7 @@ pub use joypad::JoypadButton;
 pub use nes::PlayerJoypad;
 pub use nes::NES;
 pub use ppu::frame;
+pub use rom::ROM;
 
 #[macro_use]
 extern crate lazy_static;

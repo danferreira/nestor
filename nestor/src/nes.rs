@@ -1,10 +1,8 @@
-use std::{fs, path::Path};
-
 use crate::{
     bus::Bus,
     cpu::CPU,
     ppu::{frame::Frame, palette},
-    rom::{Mirroring, Rom},
+    rom::{Mirroring, ROM},
     JoypadButton,
 };
 
@@ -23,7 +21,7 @@ pub enum PlayerJoypad {
 
 pub struct NES {
     pub cpu: CPU,
-    pub rom: Option<Rom>,
+    pub rom: Option<ROM>,
     pub status: EmulationStatus,
 }
 
@@ -40,9 +38,13 @@ impl NES {
     }
 
     pub fn emulate_frame(&mut self) -> Option<&Frame> {
-        let cycles = self.cpu.run();
+        if self.is_running() {
+            let cycles = self.cpu.run();
 
-        self.cpu.bus.tick(cycles)
+            return self.cpu.bus.tick(cycles);
+        }
+
+        None
     }
 
     pub fn button_pressed(&mut self, player: PlayerJoypad, key: JoypadButton, pressed: bool) {
@@ -52,15 +54,7 @@ impl NES {
         }
     }
 
-    pub fn load_rom<P: AsRef<Path>>(&mut self, path: P) {
-        let game_code = fs::read(path).expect("Should have been able to read the game");
-
-        self.load_rom_bytes(&game_code);
-    }
-
-    pub fn load_rom_bytes(&mut self, game_code: &[u8]) {
-        let rom = Rom::new(game_code).unwrap();
-
+    pub fn insert_cartridge(&mut self, rom: ROM) {
         self.cpu.bus.load_rom(&rom);
 
         self.rom = Some(rom);

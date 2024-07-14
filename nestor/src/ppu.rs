@@ -11,7 +11,7 @@ mod status;
 
 use crate::mapper::Mapper;
 use crate::ppu::frame::Frame;
-use crate::rom::{Mirroring, Rom};
+use crate::rom::{Mirroring, ROM};
 use addr::AddrRegister;
 use control::ControlRegister;
 use mask::MaskRegister;
@@ -161,7 +161,7 @@ impl PPU {
         }
     }
 
-    pub fn load_rom(&mut self, rom: &Rom) {
+    pub fn load_rom(&mut self, rom: &ROM) {
         self.mirroring = Some(rom.mirroring.clone());
         self.mapper = Some(Arc::clone(&rom.mapper));
     }

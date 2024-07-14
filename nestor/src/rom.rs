@@ -1,3 +1,5 @@
+use std::fs;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use crate::mapper::Mapper;
@@ -15,15 +17,15 @@ pub enum Mirroring {
     None,
 }
 
-pub struct Rom {
+pub struct ROM {
     pub prg_rom: Vec<u8>,
     pub chr_rom: Vec<u8>,
     pub mapper: Arc<Mutex<Box<dyn Mapper + Send>>>,
     pub mirroring: Mirroring,
 }
 
-impl Rom {
-    pub fn new(raw: &[u8]) -> Result<Rom, String> {
+impl ROM {
+    pub fn from_bytes(raw: &[u8]) -> Result<ROM, String> {
         if raw[0..4] != NES_TAG {
             return Err("File is not in iNES file format".to_string());
         }
@@ -71,14 +73,20 @@ impl Rom {
         let mapper: Mutex<Box<dyn Mapper + Send>> = match mapper_idx {
             0 => Mutex::new(Box::new(NROM::new(&prg_rom, &chr_rom))),
             3 => Mutex::new(Box::new(CNROM::new(&prg_rom, &chr_rom))),
-            _ => panic!("Mapper not implement yet {mapper_idx}"),
+            _ => return Err(format!("Mapper not implement yet {mapper_idx}")),
         };
 
-        Ok(Rom {
+        Ok(ROM {
             prg_rom,
             chr_rom,
             mapper: Arc::new(mapper),
             mirroring,
         })
+    }
+
+    pub fn from_path<P: AsRef<Path>>(path: P) -> Result<ROM, String> {
+        let game_code = fs::read(path).expect("Should have been able to read the game");
+
+        ROM::from_bytes(&game_code)
     }
 }

@@ -9,3 +9,6 @@ edition = "2021"
 lazy_static = "1.4.0"
 bitflags = "1.2.1"
 rand = "=0.7.3"
+
+[lints.clippy]
+upper_case_acronyms = "allow"

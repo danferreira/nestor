@@ -11,7 +11,7 @@ use gloo::{
         Blob,
     },
 };
-use nestor::{JoypadButton, PlayerJoypad, NES};
+use nestor::{JoypadButton, PlayerJoypad, NES, ROM};
 use std::borrow::Cow;
 use wasm_bindgen::JsCast;
 use web_sys::HtmlInputElement;
@@ -122,8 +122,13 @@ pub fn app() -> Html {
 
                     move |bytes| match bytes {
                         Ok(bytes) => {
-                            emulator.borrow_mut().load_rom_bytes(&bytes);
-                            millis.set(16); // Start the emulator loop
+                            match ROM::from_bytes(&bytes) {
+                                Ok(rom) => {
+                                    emulator.borrow_mut().insert_cartridge(rom);
+                                    millis.set(16); // Start the emulator loop
+                                }
+                                Err(error) => info!(format!("Failed on loading the rom: {error}")),
+                            }
                         }
                         Err(_e) => {
                             info!("Error when reading the file");
