@@ -1,25 +1,6 @@
 ## NEStor
 
-NEStor is a NES emulator crafted in Rust for educational and nostalgia purposes. It's not ready for daily gaming sessions yet.
-
-
-### Keyboard to Gamepad Mapping
-
-| Keyboard       | Gamepad           |
-| -------------- | ----------------- |
-| A              | A                 |
-| S              | B                 |
-| Space          | Select            |
-| Enter          | Start             |
-| Arrow Keys     | Directional Pad   |
-
-### Emulator Shortcuts
-
-| Keyboard       | Action                    |
-| -------------- | ------------------------- |
-| O              | Load a new ROM            |
-| N              | Open Nametable Viewer     |
-| P              | Open PPU Viewer           |
+NEStor is a NES emulator crafted in Rust for educational purpose. It's not ready for daily gaming sessions yet.
 
 
 ### TODO
@@ -47,7 +28,6 @@ NEStor is a NES emulator crafted in Rust for educational and nostalgia purposes.
     - [ ] Regions
         - [x] NTSC
         - [ ] PAL
-        - [ ] Dendy
 - [x] Gamepad
     - [x] 1p
     - [x] 2p
@@ -56,19 +36,20 @@ NEStor is a NES emulator crafted in Rust for educational and nostalgia purposes.
 - [ ] Frontends
     - [x] Desktop
         - [ ] Gui
-            - [ ] Proper menus
+            - [X] Initial Screen
+            - [x] Proper menus
             - [ ] Settings
                 - [ ] Video config
                 - [ ] Gamepad config
         - [ ] Debugger
             - [x] PPU Viewer
             - [x] Nametable Viewer
-            - [ ] FPS display
-            - [ ] Improve tracer
+            - [x] FPS display
             - [ ] Disassembler
 
     - [ ] Browser (WASM)
         - [ ] Gui
+            - [X] Initial Screen
             - [ ] Proper menus
             - [ ] Settings
                 - [ ] Video config
@@ -77,5 +58,4 @@ NEStor is a NES emulator crafted in Rust for educational and nostalgia purposes.
             - [x] PPU Viewer
             - [x] Nametable Viewer
             - [x] FPS display
-            - [ ] Improve tracer
             - [ ] Disassembler
