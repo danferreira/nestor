@@ -560,7 +560,7 @@ impl PPU {
     fn mirror_nametable(&self, addr: u16) -> u16 {
         let mirrored_vram = addr & 0x0FFF;
         let nametable_index = mirrored_vram / 0x400;
-        match (self.mirroring.clone(), nametable_index) {
+        match (&self.mirroring, nametable_index) {
             (Some(Mirroring::Vertical), 2) | (Some(Mirroring::Vertical), 3) => {
                 mirrored_vram - 0x800
             }
