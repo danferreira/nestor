@@ -72,13 +72,13 @@ pub(crate) fn menu_bar(
     menu::MenuBar::new(items)
         .style(|_theme, _status| menu_bar::Style {
             bar_background: Color::BLACK.into(),
-            bar_background_expand: [0; 4].into(),
+            bar_background_expand: 0.into(),
             menu_background: Color::BLACK.into(),
             menu_border: Border {
-                radius: [0.0; 4].into(),
+                radius: 0.0.into(),
                 ..Default::default()
             },
-            menu_background_expand: [0; 4].into(),
+            menu_background_expand: 0.into(),
             ..Default::default()
         })
         .width(Length::Fill)

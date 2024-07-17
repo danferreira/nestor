@@ -415,7 +415,7 @@ impl Window for PPUWindow {
         let columns = Column::new()
             .push(pt_row)
             .push(palette_image_ppu)
-            .align_items(iced::Alignment::Center);
+            .align_x(iced::Alignment::Center);
 
         container(columns)
             .width(Length::Fill)
