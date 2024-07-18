@@ -1,8 +1,9 @@
 use fps_counter::FPSCounter;
 use iced::keyboard::{key, Key};
-use iced::widget::{center, container, horizontal_space, text, Row};
+use iced::widget::{center, container, horizontal_space, row, text, Row, Stack};
 use iced::widget::{image, Column};
-use iced::{futures, window, Size};
+use iced::window::Settings;
+use iced::{futures, window, Alignment, Pixels, Size};
 use iced::{keyboard, Border};
 use iced::{Element, Length, Subscription, Task, Theme};
 use menu::{menu_bar, Menu};
@@ -15,8 +16,10 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use nestor::{JoypadButton, PlayerJoypad, NES, ROM};
-
 mod menu;
+
+const NES_WIDTH: u32 = 256;
+const NES_HEIGHT: u32 = 240;
 
 fn main() -> iced::Result {
     iced::daemon(App::title, App::update, App::view)
@@ -45,7 +48,7 @@ pub enum View {
     Nametables,
 }
 
-trait Window {
+trait AppWindow {
     fn title(&self) -> String;
     fn update(&mut self, _message: Message) -> Task<Message> {
         Task::none()
@@ -59,7 +62,7 @@ trait Window {
 #[derive(Default)]
 struct App {
     nes: Arc<Mutex<NES>>,
-    windows: BTreeMap<window::Id, (View, Box<dyn Window>)>,
+    windows: BTreeMap<window::Id, (View, Box<dyn AppWindow>)>,
 }
 
 impl App {
@@ -69,8 +72,12 @@ impl App {
                 nes: Arc::new(Mutex::new(NES::new())),
                 windows: BTreeMap::new(),
             },
-            window::open(window::Settings::default())
-                .map(|id| Message::WindowOpened(id, View::Main)),
+            window::open(Settings {
+                size: Size::new((NES_WIDTH * 3) as f32, (NES_HEIGHT * 3) as f32),
+                resizable: false,
+                ..window::Settings::default()
+            })
+            .map(|id| Message::WindowOpened(id, View::Main)),
         )
     }
     fn title(&self, window: window::Id) -> String {
@@ -91,14 +98,25 @@ impl App {
                     return window::gain_focus(*id);
                 }
 
-                window::open(window::Settings {
-                    size: Size::new(800.0, 400.0),
-                    ..Default::default()
-                })
-                .map(move |id| Message::WindowOpened(id, view.clone()))
+                let window_settings = match view {
+                    View::Main => window::Settings {
+                        size: Size::new((NES_WIDTH * 3) as f32, (NES_HEIGHT * 3) as f32),
+                        ..Default::default()
+                    },
+                    View::PPU => window::Settings {
+                        size: Size::new(768.0, 360.0),
+                        ..Default::default()
+                    },
+                    View::Nametables => window::Settings {
+                        size: Size::new((NES_WIDTH * 2) as f32, (NES_HEIGHT * 2) as f32),
+                        ..Default::default()
+                    },
+                };
+
+                window::open(window_settings).map(move |id| Message::WindowOpened(id, view.clone()))
             }
             Message::WindowOpened(id, view) => {
-                let window: Box<dyn Window> = match view {
+                let window: Box<dyn AppWindow> = match view {
                     View::Main => Box::new(Emulator::new(self.nes.clone())),
                     View::PPU => Box::new(PPUWindow::new(self.nes.clone())),
                     View::Nametables => Box::new(NametablesWindow::new(self.nes.clone())),
@@ -203,7 +221,7 @@ impl Emulator {
     }
 }
 
-impl Window for Emulator {
+impl AppWindow for Emulator {
     fn title(&self) -> String {
         "NEStor - NES Emulator".into()
     }
@@ -316,15 +334,25 @@ impl Window for Emulator {
         let mut cols = Column::new().push(mb);
 
         if self.is_running {
-            let img_handle = image::Handle::from_rgba(256, 240, self.frame_buffer.to_vec());
+            let img_handle =
+                image::Handle::from_rgba(NES_WIDTH, NES_HEIGHT, self.frame_buffer.to_vec());
 
             let image: Element<Message> = image(img_handle)
                 .filter_method(image::FilterMethod::Nearest)
                 .width(Length::Fill)
                 .height(Length::Fill)
+                .content_fit(iced::ContentFit::Fill)
                 .into();
 
-            cols = cols.push(image).push(text(format!("FPS: {}", self.fps)));
+            let fps_text = row![text(self.fps)
+                .size(Pixels(42.0))
+                .width(Length::Fill)
+                .align_x(Alignment::End)]
+            .padding(20);
+
+            let stack = Stack::new().push(image).push(fps_text);
+
+            cols = cols.push(stack);
         }
 
         container(cols)
@@ -344,7 +372,7 @@ impl PPUWindow {
     }
 }
 
-impl Window for PPUWindow {
+impl AppWindow for PPUWindow {
     fn title(&self) -> String {
         "NEStor - PPU".into()
     }
@@ -447,7 +475,7 @@ impl NametablesWindow {
     }
 }
 
-impl Window for NametablesWindow {
+impl AppWindow for NametablesWindow {
     fn title(&self) -> String {
         "NEStor - Nametables".into()
     }
