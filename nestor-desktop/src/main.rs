@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
+use std::time::{Duration, Instant};
 
 use nestor::{JoypadButton, PlayerJoypad, NES, ROM};
 
@@ -166,14 +167,26 @@ impl Emulator {
         {
             let nes = nes.clone();
 
-            thread::spawn(move || loop {
-                let mut nes = nes.lock().unwrap();
+            thread::spawn(move || {
+                let wait_time = Duration::from_millis(16);
+                let mut start = Instant::now();
 
-                if nes.is_running() {
-                    let frame = nes.emulate_frame();
+                loop {
+                    let mut nes = nes.lock().unwrap();
 
-                    if let Some(frame) = frame {
-                        tx.send(frame.to_rgba()).unwrap();
+                    if nes.is_running() {
+                        let frame = nes.emulate_frame();
+
+                        if let Some(frame) = frame {
+                            tx.send(frame.to_rgba()).unwrap();
+                            let runtime = start.elapsed();
+
+                            if let Some(remaining) = wait_time.checked_sub(runtime) {
+                                thread::sleep(remaining);
+                            }
+
+                            start = Instant::now()
+                        }
                     }
                 }
             });
