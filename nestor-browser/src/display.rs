@@ -3,7 +3,7 @@ use web_sys::{HtmlCanvasElement, ImageData};
 use yew::{function_component, html, use_effect_with, use_mut_ref, use_node_ref, Html, Properties};
 
 const WIDTH: u32 = 256;
-const HEIGHT: u32 = 240;
+const HEIGHT: u32 = 224;
 const SCALE: f64 = 3.0;
 
 #[derive(Properties, PartialEq, Clone)]
@@ -36,15 +36,8 @@ pub fn display(props: &DisplayProps) -> Html {
 
                 ctx.set_image_smoothing_enabled(false);
 
-                ctx.scale(SCALE, SCALE).unwrap();
-
                 ctx.set_fill_style(&"#000000".into());
-                ctx.fill_rect(
-                    0_f64,
-                    0_f64,
-                    (WIDTH * SCALE as u32) as f64,
-                    (HEIGHT * SCALE as u32) as f64,
-                );
+                ctx.fill_rect(0_f64, 0_f64, (WIDTH as u32) as f64, (HEIGHT as u32) as f64);
 
                 *ctx_ref.borrow_mut() = Some(ctx);
             }
@@ -62,21 +55,20 @@ pub fn display(props: &DisplayProps) -> Html {
                             .unwrap();
 
                     ctx.put_image_data(&img_data, 0.0, 0.0).unwrap();
-
-                    ctx.draw_image_with_html_canvas_element(&ctx.canvas().unwrap(), 0_f64, 0_f64)
-                        .unwrap();
                 }
             }
         });
     }
 
+    let mut class = "canvas-container";
+
+    if cfg!(feature = "tauri") {
+        class = "full-canvas-container";
+    }
+
     html! {
-        <div class="canvas-container">
-            <canvas
-                width={(WIDTH * SCALE as u32).to_string()}
-                height={(HEIGHT * SCALE as u32).to_string()}
-                ref={canvas_ref}>
-            </canvas>
+        <div>
+            <canvas class={class} width="256" height="240" ref={canvas_ref}></canvas>
             <div class="fps-counter">{props.fps} </div>
         </div>
     }

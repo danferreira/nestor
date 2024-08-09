@@ -1,16 +1,34 @@
-use wasm_bindgen::{Clamped, JsCast};
-use web_sys::{HtmlCanvasElement, ImageData};
-use yew::{function_component, html, use_effect_with, use_mut_ref, use_node_ref, Html, Properties};
+use serde::{Deserialize, Serialize};
+use wasm_bindgen::{prelude::Closure, Clamped, JsCast};
+use web_sys::{BroadcastChannel, HtmlCanvasElement, ImageData, MessageEvent};
+use yew::{function_component, html, use_effect_with, use_mut_ref, use_node_ref, use_state, Html};
 
-#[derive(Properties, PartialEq, Clone)]
-pub struct NametablesProps {
+#[derive(Serialize, Deserialize)]
+pub struct NametablesData {
     pub nametables: Vec<u8>,
 }
 
 #[function_component(Nametables)]
-pub fn nametables(props: &NametablesProps) -> Html {
+pub fn nametables() -> Html {
     let canvas_ref = use_node_ref();
     let ctx_ref = use_mut_ref(|| None);
+    let nametable_buffer = use_state(Vec::new);
+
+    let broadcast_channel = BroadcastChannel::new("nametables").unwrap();
+    {
+        let nametable_buffer = nametable_buffer.clone();
+        use_effect_with((), move |_| {
+            let channel = broadcast_channel.clone();
+            let listener = Closure::wrap(Box::new(move |e: MessageEvent| {
+                if let Ok(message) = serde_wasm_bindgen::from_value::<NametablesData>(e.data()) {
+                    nametable_buffer.set(message.nametables);
+                }
+            }) as Box<dyn FnMut(_)>);
+
+            channel.set_onmessage(Some(listener.as_ref().unchecked_ref()));
+            listener.forget();
+        });
+    }
 
     {
         let canvas_ref = canvas_ref.clone();
@@ -39,14 +57,14 @@ pub fn nametables(props: &NametablesProps) -> Html {
     }
 
     {
-        let props = props.nametables.clone();
-
-        use_effect_with(props, move |props| {
+        use_effect_with(nametable_buffer, move |nametable_buffer| {
             if let Some(ctx) = ctx_ref.borrow().as_ref() {
-                if !props.is_empty() {
-                    let img_data =
-                        ImageData::new_with_u8_clamped_array(Clamped(props.as_slice()), 512)
-                            .unwrap();
+                if !nametable_buffer.is_empty() {
+                    let img_data = ImageData::new_with_u8_clamped_array(
+                        Clamped(nametable_buffer.as_slice()),
+                        512,
+                    )
+                    .unwrap();
 
                     ctx.put_image_data(&img_data, 0.0, 0.0).unwrap();
 
@@ -63,6 +81,7 @@ pub fn nametables(props: &NametablesProps) -> Html {
                 <fieldset>
                     <legend>{"Nametables"}</legend>
                     <canvas
+                        class="canvas-container"
                         width="512"
                         height="480"
                         ref={canvas_ref}>

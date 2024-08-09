@@ -175,7 +175,6 @@ impl NES {
         let mut x_offset = 0;
         let mut y_offset = 0;
 
-        // let rom = self.rom.as_ref().unwrap().lock().unwrap();
         let rom = self.rom.as_ref().unwrap();
         let chr_rom = &rom.chr_rom;
         let ppu_ctrl_bank = self.cpu.bus.ppu.ctrl.bknd_pattern_addr() as usize;
