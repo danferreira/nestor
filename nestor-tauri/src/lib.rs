@@ -1,18 +1,46 @@
-use std::fs;
+use std::{fs, sync::Mutex};
 
+use nestor::{NES, ROM};
+use nestor_browser::{NametablesData, PPUData};
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder},
-    AppHandle, Emitter, Url, WebviewUrl, WebviewWindowBuilder,
+    Manager, State, Url, WebviewUrl, WebviewWindowBuilder,
 };
 use tauri_plugin_dialog::DialogExt;
 
-// Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
 #[tauri::command]
-fn load_rom(app: AppHandle, path: String) {
-    app.emit("load_rom", &path).unwrap();
+async fn request_frame(state: State<'_, Mutex<NES>>) -> Result<Vec<u8>, ()> {
+    loop {
+        let mut state = state.lock().unwrap();
+        if state.is_running() {
+            if let Some(frame) = state.emulate_frame() {
+                return Ok(frame.to_rgba());
+            }
+        }
+    }
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
+#[tauri::command]
+async fn request_ppu(state: State<'_, Mutex<NES>>) -> Result<PPUData, ()> {
+    let state = state.lock().unwrap();
+    let (pt_0, pt_1) = state.ppu_viewer();
+    let palettes = state.palette_viewer();
+    Ok(PPUData {
+        pattern_table_0: pt_0.to_rgba(),
+        pattern_table_1: pt_1.to_rgba(),
+        palettes: palettes.to_rgba(),
+    })
+}
+
+#[tauri::command]
+async fn request_nametables(state: State<'_, Mutex<NES>>) -> Result<NametablesData, ()> {
+    let state = state.lock().unwrap();
+    let nametables = state.nametable_viewer();
+    Ok(NametablesData {
+        nametables: nametables.to_rgba(),
+    })
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -40,7 +68,14 @@ pub fn run() {
                 ])
                 .build()?;
 
+            app.manage(Mutex::new(NES::new()));
+
             app.set_menu(menu).unwrap();
+
+            {
+                let window = app.get_webview_window("main").unwrap();
+                window.open_devtools();
+            }
 
             app.on_menu_event(move |app, event| {
                 let app_clone = app.clone();
@@ -52,14 +87,18 @@ pub fn run() {
                             if let Some(file_response) = file_path {
                                 let content =
                                     fs::read(file_response.path).expect("Failed to read ROM file");
-                                app_clone.emit("load_rom", content).unwrap();
+                                let state = app_clone.state::<Mutex<NES>>();
+                                let rom = ROM::from_bytes(&content).unwrap();
+                                state.lock().unwrap().insert_cartridge(rom);
                             }
                         })
                 } else if event.id() == "debug_ppu" {
                     WebviewWindowBuilder::new(
                         &app_clone,
                         "debug_ppu",
-                        WebviewUrl::External(Url::parse("http://localhost:8080/ppu").unwrap()),
+                        WebviewUrl::External(
+                            Url::parse("http://localhost:8080/tauri/ppu").unwrap(),
+                        ),
                     )
                     .title("NEStor - PPU Debug")
                     .inner_size(600.0, 600.0)
@@ -70,7 +109,7 @@ pub fn run() {
                         &app_clone,
                         "debug_nametable",
                         WebviewUrl::External(
-                            Url::parse("http://localhost:8080/nametables").unwrap(),
+                            Url::parse("http://localhost:8080/tauri/nametables").unwrap(),
                         ),
                     )
                     .title("NEStor - Nametables Debug")
@@ -82,7 +121,11 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![load_rom])
+        .invoke_handler(tauri::generate_handler![
+            request_frame,
+            request_ppu,
+            request_nametables
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

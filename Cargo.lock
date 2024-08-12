@@ -3752,6 +3752,8 @@ dependencies = [
 name = "nestor-tauri"
 version = "0.1.0"
 dependencies = [
+ "nestor",
+ "nestor-browser",
  "serde",
  "serde_json",
  "tauri",

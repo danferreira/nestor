@@ -1,9 +1,10 @@
-use app::App;
-
 mod app;
-mod display;
+mod emulator;
 mod nametables;
 mod ppu;
+mod tauri;
+
+use app::App;
 
 fn main() {
     yew::Renderer::<App>::new().render();

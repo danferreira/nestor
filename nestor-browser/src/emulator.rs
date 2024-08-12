@@ -4,16 +4,15 @@ use yew::{function_component, html, use_effect_with, use_mut_ref, use_node_ref, 
 
 const WIDTH: u32 = 256;
 const HEIGHT: u32 = 224;
-const SCALE: f64 = 3.0;
 
 #[derive(Properties, PartialEq, Clone)]
-pub struct DisplayProps {
+pub struct EmulatorProps {
     pub frame: Vec<u8>,
-    pub fps: usize,
+    pub fps: Option<usize>,
 }
 
-#[function_component(Display)]
-pub fn display(props: &DisplayProps) -> Html {
+#[function_component(Emulator)]
+pub fn emulator(props: &EmulatorProps) -> Html {
     let canvas_ref = use_node_ref();
     let ctx_ref = use_mut_ref(|| None);
 
@@ -37,7 +36,7 @@ pub fn display(props: &DisplayProps) -> Html {
                 ctx.set_image_smoothing_enabled(false);
 
                 ctx.set_fill_style(&"#000000".into());
-                ctx.fill_rect(0_f64, 0_f64, (WIDTH as u32) as f64, (HEIGHT as u32) as f64);
+                ctx.fill_rect(0_f64, 0_f64, WIDTH as f64, HEIGHT as f64);
 
                 *ctx_ref.borrow_mut() = Some(ctx);
             }
@@ -60,16 +59,12 @@ pub fn display(props: &DisplayProps) -> Html {
         });
     }
 
-    let mut class = "canvas-container";
-
-    if cfg!(feature = "tauri") {
-        class = "full-canvas-container";
-    }
-
     html! {
-        <div>
-            <canvas class={class} width="256" height="240" ref={canvas_ref}></canvas>
-            <div class="fps-counter">{props.fps} </div>
-        </div>
+    <div>
+        <canvas class="full-canvas-container" width="256" height="240" ref={canvas_ref}></canvas>
+        if let Some(fps) = props.fps {
+            <div class="fps-counter">{fps}</div>
+        }
+    </div>
     }
 }

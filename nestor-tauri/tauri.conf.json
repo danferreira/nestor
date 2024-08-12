@@ -4,7 +4,7 @@
   "identifier": "com.tauri.dev",
   "build": {
     "beforeDevCommand": "cd ./nestor-browser && trunk serve --features tauri",
-    "devUrl": "http://localhost:8080",
+    "devUrl": "http://localhost:8080/tauri/emulator",
     "beforeBuildCommand": "cd ./nestor-browser && trunk build",
     "frontendDist": "./nestor-browser/dist"
   },
