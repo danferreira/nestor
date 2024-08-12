@@ -1,6 +1,13 @@
+use gloo::events::EventListener;
+use nestor::JoypadButton;
+use std::borrow::Cow;
 use wasm_bindgen::{Clamped, JsCast};
 use web_sys::{HtmlCanvasElement, ImageData};
-use yew::{function_component, html, use_effect_with, use_mut_ref, use_node_ref, Html, Properties};
+use yew::KeyboardEvent;
+use yew::{
+    function_component, hook, html, use_effect_with, use_mut_ref, use_node_ref, Callback, Html,
+    Properties,
+};
 
 const WIDTH: u32 = 256;
 const HEIGHT: u32 = 224;
@@ -9,6 +16,60 @@ const HEIGHT: u32 = 224;
 pub struct EmulatorProps {
     pub frame: Vec<u8>,
     pub fps: Option<usize>,
+    pub key_pressed: Callback<JoypadButton>,
+    pub key_released: Callback<JoypadButton>,
+}
+
+fn joypad_from_key(key: &str) -> Option<JoypadButton> {
+    match key {
+        "ArrowUp" => Some(JoypadButton::UP),
+        "ArrowDown" => Some(JoypadButton::DOWN),
+        "ArrowLeft" => Some(JoypadButton::LEFT),
+        "ArrowRight" => Some(JoypadButton::RIGHT),
+        "z" => Some(JoypadButton::BUTTON_A),
+        "x" => Some(JoypadButton::BUTTON_B),
+        "a" => Some(JoypadButton::START),
+        "s" => Some(JoypadButton::SELECT),
+        _ => None,
+    }
+}
+
+#[hook]
+pub fn use_joypad_button<E, F>(event_type: E, callback: F)
+where
+    E: Into<Cow<'static, str>>,
+    F: Fn(JoypadButton) + 'static,
+{
+    #[derive(PartialEq, Clone)]
+    struct EventDependents {
+        event_type: Cow<'static, str>,
+        callback: Callback<JoypadButton>,
+    }
+
+    let deps = EventDependents {
+        event_type: event_type.into(),
+        callback: Callback::from(callback),
+    };
+
+    use_effect_with(deps, |deps| {
+        let EventDependents {
+            event_type,
+            callback,
+        } = deps.clone();
+
+        let document = gloo::utils::document();
+
+        let listener = EventListener::new(&document, event_type, move |e| {
+            let key_event = e.clone().dyn_into::<KeyboardEvent>().unwrap();
+            if let Some(key) = joypad_from_key(key_event.key().as_str()) {
+                callback.emit(key);
+            }
+        });
+
+        move || {
+            drop(listener);
+        }
+    });
 }
 
 #[function_component(Emulator)]
@@ -59,6 +120,20 @@ pub fn emulator(props: &EmulatorProps) -> Html {
         });
     }
 
+    {
+        let key_pressed = props.key_pressed.clone();
+
+        use_joypad_button("keydown", move |key| {
+            key_pressed.emit(key);
+        });
+    }
+
+    {
+        let key_released = props.key_released.clone();
+        use_joypad_button("keyup", move |key| {
+            key_released.emit(key);
+        });
+    }
     html! {
     <div>
         <canvas class="full-canvas-container" width="256" height="240" ref={canvas_ref}></canvas>

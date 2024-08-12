@@ -1,6 +1,6 @@
 use std::{fs, sync::Mutex};
 
-use nestor::{NES, ROM};
+use nestor::{JoypadButton, NES, ROM};
 use nestor_browser::{NametablesData, PPUData};
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder},
@@ -39,6 +39,22 @@ async fn request_nametables(state: State<'_, Mutex<NES>>) -> Result<NametablesDa
     Ok(NametablesData {
         nametables: nametables.to_rgba(),
     })
+}
+
+#[tauri::command]
+async fn key_pressed(key: JoypadButton, state: State<'_, Mutex<NES>>) -> Result<(), ()> {
+    let mut state = state.lock().unwrap();
+    state.button_pressed(nestor::PlayerJoypad::One, key, true);
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn key_released(key: JoypadButton, state: State<'_, Mutex<NES>>) -> Result<(), ()> {
+    let mut state = state.lock().unwrap();
+    state.button_pressed(nestor::PlayerJoypad::One, key, false);
+
+    Ok(())
 }
 
 pub fn run() {
@@ -124,7 +140,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             request_frame,
             request_ppu,
-            request_nametables
+            request_nametables,
+            key_pressed,
+            key_released
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

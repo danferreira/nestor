@@ -3,10 +3,13 @@ use crate::nametables::Nametables;
 use crate::ppu::PPU;
 
 use fps_counter::FPSCounter;
+use nestor::JoypadButton;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 use web_sys::js_sys::Uint8Array;
-use yew::{function_component, html, use_mut_ref, use_state_eq, Html};
+use yew::{
+    function_component, html, platform::spawn_local, use_mut_ref, use_state_eq, Callback, Html,
+};
 use yew_hooks::{use_async, use_interval};
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -25,6 +28,9 @@ pub struct PPUData {
 extern "C" {
     #[wasm_bindgen(js_namespace = ["window", "__TAURI__", "core"], js_name = invoke)]
     async fn invoke_without_args(cmd: &str) -> JsValue;
+
+    #[wasm_bindgen(js_namespace = ["window", "__TAURI__", "core"])]
+    async fn invoke(cmd: &str, args: JsValue) -> JsValue;
 }
 
 async fn request_data<T: DeserializeOwned>(cmd: &str) -> Result<T, ()> {
@@ -67,10 +73,38 @@ pub fn emulator_tauri_wrapper() -> Html {
         )
     }
 
+    let key_pressed = Callback::from(|key| {
+        spawn_local(async move {
+            #[derive(Serialize)]
+            struct Args {
+                key: JoypadButton,
+            }
+
+            let args = Args { key };
+
+            let args = serde_wasm_bindgen::to_value(&args).unwrap();
+            invoke("key_pressed", args).await;
+        })
+    });
+
+    let key_released = Callback::from(|key| {
+        spawn_local(async move {
+            #[derive(Serialize)]
+            struct Args {
+                key: JoypadButton,
+            }
+
+            let args = Args { key };
+
+            let args = serde_wasm_bindgen::to_value(&args).unwrap();
+            invoke("key_released", args).await;
+        })
+    });
+
     html! {
         <div>
             if let Some(frame) = &state.data {
-                <Emulator frame={(frame).clone()} fps={*fps}/>
+                <Emulator frame={(frame).clone()} fps={*fps} key_pressed={key_pressed} key_released={key_released}/>
             }
         </div>
     }
