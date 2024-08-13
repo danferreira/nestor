@@ -23,22 +23,32 @@ async fn request_frame(state: State<'_, Mutex<NES>>) -> Result<Vec<u8>, ()> {
 #[tauri::command]
 async fn request_ppu(state: State<'_, Mutex<NES>>) -> Result<PPUData, ()> {
     let state = state.lock().unwrap();
-    let (pt_0, pt_1) = state.ppu_viewer();
-    let palettes = state.palette_viewer();
-    Ok(PPUData {
-        pattern_table_0: pt_0.to_rgba(),
-        pattern_table_1: pt_1.to_rgba(),
-        palettes: palettes.to_rgba(),
-    })
+    if state.is_running() {
+        let (pt_0, pt_1) = state.ppu_viewer();
+        let palettes = state.palette_viewer();
+
+        return Ok(PPUData {
+            pattern_table_0: pt_0.to_rgba(),
+            pattern_table_1: pt_1.to_rgba(),
+            palettes: palettes.to_rgba(),
+        });
+    }
+
+    Ok(PPUData::default())
 }
 
 #[tauri::command]
 async fn request_nametables(state: State<'_, Mutex<NES>>) -> Result<NametablesData, ()> {
     let state = state.lock().unwrap();
-    let nametables = state.nametable_viewer();
-    Ok(NametablesData {
-        nametables: nametables.to_rgba(),
-    })
+
+    if state.is_running() {
+        let nametables = state.nametable_viewer();
+
+        return Ok(NametablesData {
+            nametables: nametables.to_rgba(),
+        });
+    }
+    Ok(NametablesData::default())
 }
 
 #[tauri::command]
@@ -59,7 +69,6 @@ async fn key_released(key: JoypadButton, state: State<'_, Mutex<NES>>) -> Result
 
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
             let load_rom = MenuItemBuilder::with_id("load_rom", "Load ROM").build(app)?;
@@ -117,7 +126,7 @@ pub fn run() {
                         ),
                     )
                     .title("NEStor - PPU Debug")
-                    .inner_size(600.0, 600.0)
+                    .inner_size(600.0, 400.0)
                     .build()
                     .unwrap();
                 } else if event.id() == "debug_nametable" {
@@ -129,7 +138,7 @@ pub fn run() {
                         ),
                     )
                     .title("NEStor - Nametables Debug")
-                    .inner_size(600.0, 600.0)
+                    .inner_size(600.0, 610.0)
                     .build()
                     .unwrap();
                 }

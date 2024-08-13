@@ -39,9 +39,7 @@ pub fn ppu(props: &PPUProps) -> Html {
 
                 ctx.scale(SCALE, SCALE).unwrap();
                 ctx.set_image_smoothing_enabled(false);
-
                 ctx.set_fill_style(&"#000000".into());
-
                 *ctx_pt0_ref.borrow_mut() = Some(ctx);
             }
         });
@@ -66,7 +64,6 @@ pub fn ppu(props: &PPUProps) -> Html {
 
                 ctx.scale(SCALE, SCALE).unwrap();
                 ctx.set_image_smoothing_enabled(false);
-
                 ctx.set_fill_style(&"#000000".into());
 
                 *ctx_pt1_ref.borrow_mut() = Some(ctx);

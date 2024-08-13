@@ -12,12 +12,12 @@ use yew::{
 };
 use yew_hooks::{use_async, use_interval};
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Default)]
 pub struct NametablesData {
     pub nametables: Vec<u8>,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Default)]
 pub struct PPUData {
     pub pattern_table_0: Vec<u8>,
     pub pattern_table_1: Vec<u8>,
