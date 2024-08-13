@@ -1,9 +1,22 @@
-## NEStor
-
+<h1 align="center">
+  <br>
+  <img alt="Nestor Logo" src=".github/splash.png">
+  <br>
+  <b>NEStor</b>
+</h1>
+<p align="center">
 NEStor is a NES emulator crafted in Rust for educational purpose. It's not ready for daily gaming sessions yet.
+  <br />
+</p>
+
+## Projects
+
+- nestor-browser: Using Yew/Webassembly
+- nestor-desktop: Using Iced framework
+- nestor-tauri: WIP desktop implementation using Tauri
 
 
-### TODO
+## TODO
 
 - [x] CPU
     - [x] Official Instructions
