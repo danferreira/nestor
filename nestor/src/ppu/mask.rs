@@ -75,7 +75,7 @@ impl MaskRegister {
     }
 
     pub fn update(&mut self, data: u8) {
-        self.bits = data;
+        *self.0.bits_mut() = data;
     }
 }
 

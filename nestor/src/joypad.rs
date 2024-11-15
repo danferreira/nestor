@@ -1,8 +1,9 @@
+use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
 
 bitflags! {
     // https://wiki.nesdev.com/w/index.php/Controller_reading_code
-    #[derive(Serialize, Deserialize)]
+    #[derive(Clone, Serialize, Deserialize)]
     pub struct JoypadButton: u8 {
         const RIGHT             = 0b10000000;
         const LEFT              = 0b01000000;
@@ -15,7 +16,7 @@ bitflags! {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub struct Joypad {
     strobe: bool,
     button_index: u8,
@@ -42,7 +43,7 @@ impl Joypad {
         if self.button_index > 7 {
             return 1;
         }
-        let response = (self.button_status.bits & (1 << self.button_index)) >> self.button_index;
+        let response = (self.button_status.bits() & (1 << self.button_index)) >> self.button_index;
         if !self.strobe && self.button_index <= 7 {
             self.button_index += 1;
         }

@@ -105,18 +105,17 @@ pub fn run() {
             app.on_menu_event(move |app, event| {
                 let app_clone = app.clone();
                 if event.id() == "load_rom" {
-                    app.dialog()
-                        .file()
-                        .add_filter("ROM", &["nes"])
-                        .pick_file(move |file_path| {
-                            if let Some(file_response) = file_path {
-                                let content =
-                                    fs::read(file_response.path).expect("Failed to read ROM file");
+                    app.dialog().file().add_filter("ROM", &["nes"]).pick_file(
+                        move |maybe_file_path| {
+                            if let Some(file_path) = maybe_file_path {
+                                let content = fs::read(file_path.as_path().unwrap())
+                                    .expect("Failed to read ROM file");
                                 let state = app_clone.state::<Mutex<NES>>();
                                 let rom = ROM::from_bytes(&content).unwrap();
                                 state.lock().unwrap().insert_cartridge(rom);
                             }
-                        })
+                        },
+                    )
                 } else if event.id() == "debug_ppu" {
                     WebviewWindowBuilder::new(
                         &app_clone,

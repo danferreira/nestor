@@ -34,7 +34,7 @@ impl ControlRegister {
     }
 
     pub fn nametable_addr(&self) -> u16 {
-        match self.bits & 0b11 {
+        match self.bits() & 0b11 {
             0 => 0x2000,
             1 => 0x2400,
             2 => 0x2800,
@@ -88,7 +88,7 @@ impl ControlRegister {
     }
 
     pub fn update(&mut self, data: u8) {
-        self.bits = data;
+        *self.0.bits_mut() = data;
     }
 }
 

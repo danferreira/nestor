@@ -14,8 +14,15 @@ NEStor is a NES emulator crafted in Rust for educational purpose. It's not ready
 
 ### Projects
 
-- nestor-browser: Using Yew/Webassembly
-- nestor-desktop: Using Iced framework
+- nestor-browser: Using Yew/Webassembly (WIP)
+- nestor-tauri: WIP desktop implementation using Tauri
+
+### Running
+
+```sh
+$ cargo tauri dev --release
+```
+
 - nestor-tauri: WIP desktop implementation using Tauri
 
 ### TODO

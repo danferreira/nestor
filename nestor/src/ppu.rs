@@ -612,7 +612,7 @@ impl PPU {
         match address {
             PPUCTRL | PPUMASK | OAMADDR | PPUSCROLL | PPUADDR => self.data_bus,
             PPUSTATUS => {
-                let mut data = self.status.snapshot();
+                let mut data = self.status.bits();
 
                 data &= 0xE0; // Clear the lower 5 bits
                 data |= self.data_bus & 0x1f; // Set the lower 5 bits to the last value written to PPU

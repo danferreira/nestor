@@ -56,10 +56,6 @@ impl StatusRegister {
     pub fn is_in_vblank(&self) -> bool {
         self.contains(StatusRegister::VBLANK_STARTED)
     }
-
-    pub fn snapshot(&self) -> u8 {
-        self.bits
-    }
 }
 
 impl Default for StatusRegister {

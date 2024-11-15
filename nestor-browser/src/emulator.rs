@@ -96,7 +96,7 @@ pub fn emulator(props: &EmulatorProps) -> Html {
 
                 ctx.set_image_smoothing_enabled(false);
 
-                ctx.set_fill_style(&"#000000".into());
+                ctx.set_fill_style_str("#000000");
                 ctx.fill_rect(0_f64, 0_f64, WIDTH as f64, HEIGHT as f64);
 
                 *ctx_ref.borrow_mut() = Some(ctx);
