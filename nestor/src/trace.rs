@@ -1,4 +1,6 @@
 #![allow(dead_code)]
+use crate::bus::CpuBus;
+use crate::bus::Memory;
 use crate::cpu::AddressingMode;
 use crate::cpu::CPU;
 use crate::opcodes;
@@ -10,7 +12,7 @@ lazy_static! {
         vec!(0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2007, 0x4016, 0x4017);
 }
 
-pub fn trace(cpu: &mut CPU) -> String {
+pub fn trace<B: Memory + CpuBus>(cpu: &mut CPU<B>) -> String {
     let opscodes: &HashMap<u8, &'static opcodes::OpCode> = &opcodes::OPCODES_MAP;
 
     let non_readable_addr = &NON_READABLE_ADDR;

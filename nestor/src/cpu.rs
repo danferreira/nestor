@@ -1,5 +1,7 @@
+use std::fmt::Debug;
+
 use crate::{
-    bus::Bus,
+    bus::{CpuBus, Memory},
     opcodes::{Mnemonic, OpCode, OPCODES_MAP},
 };
 
@@ -15,14 +17,14 @@ const NEGATIVE_FLAG: u8 = 1 << 7;
 
 const STACK_RESET: u8 = 0xFD;
 
-pub struct CPU {
+pub struct CPU<B: Memory + CpuBus> {
     pub register_a: u8,
     pub register_x: u8,
     pub register_y: u8,
     pub processor_status: u8,
     pub stack_pointer: u8,
     pub program_counter: u16,
-    pub bus: Bus,
+    pub bus: B,
     pub cycles: u64,
 }
 
@@ -48,8 +50,8 @@ fn page_cross(addr1: u16, addr2: u16) -> bool {
     addr1 & 0xFF00 != addr2 & 0xFF00
 }
 
-impl CPU {
-    pub fn new(bus: Bus) -> CPU {
+impl<B: Memory + CpuBus> CPU<B> {
+    pub fn new(bus: B) -> Self {
         CPU {
             register_a: 0,
             register_x: 0,
@@ -142,6 +144,8 @@ impl CPU {
 
     fn pop_stack(&mut self) -> u8 {
         self.stack_pointer = self.stack_pointer.wrapping_add(1);
+
+        println!("sp {:#X}", (self.stack_pointer as u16) + 0x0100);
         self.bus.mem_read((self.stack_pointer as u16) + 0x0100)
     }
 
@@ -693,8 +697,7 @@ impl CPU {
 
         // Update flags
         self.set_flag(CARRY_FLAG, and_result & 0x01 != 0); // Carry is old bit 0
-        self.set_flag(ZERO_FLAG, shift_result == 0);
-        self.set_flag(NEGATIVE_FLAG, shift_result & 0x80 != 0); // Should always be clear for ASR
+        self.set_zero_and_negative_flags(shift_result);
 
         // Store the result back in the accumulator
         self.register_a = shift_result;
@@ -1074,5 +1077,622 @@ impl CPU {
         self.cycles += opcode.cycles as u64;
 
         (self.cycles - start_cycles) as u8
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    struct MockBus {
+        memory: [u8; 0x10000],
+    }
+
+    impl MockBus {
+        pub fn new() -> Self {
+            let mut bus = Self {
+                memory: [0; 0x10000],
+            };
+
+            bus.mem_write_u16(0xFFFC, 0x8000);
+
+            bus
+        }
+
+        pub fn load(&mut self, data: &[u8]) {
+            self.memory[0x8000..(0x8000 + data.len())].copy_from_slice(data);
+        }
+    }
+
+    impl Memory for MockBus {
+        fn mem_read(&mut self, addr: u16) -> u8 {
+            self.memory[addr as usize]
+        }
+
+        fn mem_write(&mut self, addr: u16, data: u8) {
+            self.memory[addr as usize] = data;
+        }
+    }
+
+    impl CpuBus for MockBus {
+        fn poll_nmi_status(&mut self) -> Option<u8> {
+            None
+        }
+    }
+
+    #[test]
+    fn test_adc_carry_zero_immediate() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0x69, 0x38]);
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+        cpu.register_a = 0xc8;
+
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0);
+        assert!(cpu.get_flag(CARRY_FLAG));
+        assert!(cpu.get_flag(ZERO_FLAG));
+        assert!(!cpu.get_flag(NEGATIVE_FLAG));
+    }
+
+    #[test]
+    fn test_and_immediate() {
+        let mut mock_bus = MockBus::new();
+
+        mock_bus.load(&[0x29, 0x12]);
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+        cpu.register_a = 0x01;
+
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0x0);
+        assert!(cpu.get_flag(ZERO_FLAG));
+        assert!(!cpu.get_flag(NEGATIVE_FLAG));
+    }
+
+    #[test]
+    fn test_asl_immediate() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0x0A]);
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+        cpu.register_a = 0b11000001;
+
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0b10000010);
+        assert!(cpu.get_flag(CARRY_FLAG));
+        assert!(!cpu.get_flag(ZERO_FLAG));
+        assert!(cpu.get_flag(NEGATIVE_FLAG));
+    }
+
+    #[test]
+    fn test_bit_zero_flag() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0x24, 0x10]);
+        mock_bus.mem_write(0x0010, 0xFF);
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+        cpu.register_a = 0x00;
+
+        cpu.run();
+
+        assert!(cpu.get_flag(ZERO_FLAG));
+        assert!(cpu.get_flag(NEGATIVE_FLAG));
+        assert!(cpu.get_flag(OVERFLOW_FLAG));
+    }
+
+    #[test]
+    fn test_brk() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0x00]); // BRK
+        mock_bus.mem_write_u16(0xFFFE, 0x9000); // Interrupt vector
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, 0x9000);
+    }
+
+    #[test]
+    fn test_clc() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0x18]);
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+        cpu.set_flag(CARRY_FLAG, true);
+
+        cpu.run();
+
+        assert!(!cpu.get_flag(CARRY_FLAG));
+    }
+
+    #[test]
+    fn test_cld() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0xD8]);
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+        cpu.set_flag(DECIMAL_FLAG, true);
+
+        cpu.run();
+
+        assert!(!cpu.get_flag(DECIMAL_FLAG));
+    }
+
+    #[test]
+    fn test_cli() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0x58]);
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+        cpu.set_flag(IRQ_FLAG, true);
+
+        cpu.run();
+
+        assert!(!cpu.get_flag(IRQ_FLAG));
+    }
+
+    #[test]
+    fn test_clv() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0xB8]);
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+        cpu.set_flag(OVERFLOW_FLAG, true);
+
+        cpu.run();
+
+        assert!(!cpu.get_flag(OVERFLOW_FLAG));
+    }
+
+    #[test]
+    fn test_lda_immediate() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0xA9, 0x42]); // LDA #$42
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.program_counter = 0x8000;
+
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0x42);
+        assert!(!cpu.get_flag(ZERO_FLAG));
+        assert!(!cpu.get_flag(NEGATIVE_FLAG));
+    }
+
+    #[test]
+    fn test_lda_zero_flag() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0xA9, 0x00]); // LDA #$00
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0x00);
+        assert!(cpu.get_flag(ZERO_FLAG));
+        assert!(!cpu.get_flag(NEGATIVE_FLAG));
+    }
+
+    #[test]
+    fn test_lda_negative_flag() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0xA9, 0x80]); // LDA #$80
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0x80);
+        assert!(!cpu.get_flag(ZERO_FLAG));
+        assert!(cpu.get_flag(NEGATIVE_FLAG));
+    }
+
+    #[test]
+    fn test_sta_absolute() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0x8D, 0x00, 0x20]); // STA $2000
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+        cpu.register_a = 0x55;
+
+        cpu.run();
+
+        assert_eq!(cpu.bus.mem_read(0x2000), 0x55);
+    }
+
+    #[test]
+    fn test_tax() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0xAA]); // TAX
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+        cpu.register_a = 0x0F;
+
+        cpu.run();
+
+        assert_eq!(cpu.register_x, 0x0F);
+        assert!(!cpu.get_flag(ZERO_FLAG));
+        assert!(!cpu.get_flag(NEGATIVE_FLAG));
+    }
+
+    #[test]
+    fn test_inx_overflow() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0xE8]); // INX
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+        cpu.register_x = 0xFF;
+
+        cpu.run();
+
+        assert_eq!(cpu.register_x, 0x00);
+        assert!(cpu.get_flag(ZERO_FLAG));
+        assert!(!cpu.get_flag(NEGATIVE_FLAG));
+    }
+
+    #[test]
+    fn test_jmp_absolute() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0x4C, 0x05, 0x80]); // JMP $8005
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, 0x8005);
+    }
+
+    #[test]
+    fn test_jsr_rts() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[
+            0x20, 0x05, 0x80, // JSR $8005
+            0x00, // BRK (should not reach here)
+            0x00, // Unspecified (won’t be reached)
+            0xE8, // INX at $8005
+            0x60, // RTS
+        ]);
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+        cpu.register_x = 0x00;
+
+        cpu.run(); // Execute JSR
+
+        assert_eq!(cpu.program_counter, 0x8005);
+        assert_eq!(cpu.stack_pointer, STACK_RESET - 0x2);
+
+        cpu.run(); // Execute INX
+
+        assert_eq!(cpu.register_x, 0x01);
+
+        cpu.run(); // Execute RTS
+
+        assert_eq!(cpu.program_counter, 0x8003);
+    }
+
+    #[test]
+    fn test_branching_bne() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[
+            0xA9, 0x00, // LDA #$00
+            0xD0, 0x02, // BNE +2 (should not branch)
+            0xA9, 0x01, // LDA #$01 (should execute)
+            0x00, // BRK
+        ]);
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+
+        cpu.run(); // LDA #$00
+        cpu.run(); // BNE (should not branch)
+        cpu.run(); // LDA #$01
+
+        assert_eq!(cpu.register_a, 0x01);
+    }
+
+    #[test]
+    fn test_branching_beq() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[
+            0xA9, 0x00, // LDA #$00
+            0xF0, 0x02, // BEQ +2 (should branch)
+            0xA9, 0x01, // LDA #$01 (should be skipped)
+            0x00, // BRK
+        ]);
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+
+        cpu.run(); // LDA #$00
+        cpu.run(); // BEQ (should branch)
+        cpu.run(); // BRK
+
+        assert_eq!(cpu.register_a, 0x00);
+    }
+
+    #[test]
+    fn test_cmp_equal() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0xC9, 0x42]); // CMP #$42
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+        cpu.register_a = 0x42;
+
+        cpu.run();
+
+        assert!(cpu.get_flag(ZERO_FLAG));
+        assert!(cpu.get_flag(CARRY_FLAG));
+        assert!(!cpu.get_flag(NEGATIVE_FLAG));
+    }
+
+    #[test]
+    fn test_cmp_less() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0xC9, 0x50]); // CMP #$50
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+        cpu.register_a = 0x40;
+
+        cpu.run();
+
+        assert!(!cpu.get_flag(ZERO_FLAG));
+        assert!(!cpu.get_flag(CARRY_FLAG));
+        assert!(cpu.get_flag(NEGATIVE_FLAG));
+    }
+
+    #[test]
+    fn test_inc_zero_page() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0xE6, 0x10]); // INC $10
+        mock_bus.mem_write(0x0010, 0xFF);
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+
+        cpu.run();
+
+        assert_eq!(cpu.bus.mem_read(0x0010), 0x00);
+        assert!(cpu.get_flag(ZERO_FLAG));
+        assert!(!cpu.get_flag(NEGATIVE_FLAG));
+    }
+
+    #[test]
+    fn test_dec_absolute() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0xCE, 0x00, 0x20]); // DEC $2000
+        mock_bus.mem_write(0x2000, 0x01);
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+
+        cpu.run();
+
+        assert_eq!(cpu.bus.mem_read(0x2000), 0x00);
+        assert!(cpu.get_flag(ZERO_FLAG));
+        assert!(!cpu.get_flag(NEGATIVE_FLAG));
+    }
+
+    #[test]
+    fn test_eor_immediate() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0x49, 0xFF]); // EOR #$FF
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+        cpu.register_a = 0xFF;
+
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0x00);
+        assert!(cpu.get_flag(ZERO_FLAG));
+        assert!(!cpu.get_flag(NEGATIVE_FLAG));
+    }
+
+    #[test]
+    fn test_ora_immediate() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0x09, 0x0F]); // ORA #$0F
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+        cpu.register_a = 0xF0;
+
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0xFF);
+        assert!(!cpu.get_flag(ZERO_FLAG));
+        assert!(cpu.get_flag(NEGATIVE_FLAG));
+    }
+
+    #[test]
+    fn test_rol_accumulator() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0x2A]); // ROL A
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+        cpu.register_a = 0b10000000;
+        cpu.set_flag(CARRY_FLAG, false);
+
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0b00000000);
+        assert!(cpu.get_flag(CARRY_FLAG));
+        assert!(cpu.get_flag(ZERO_FLAG));
+        assert!(!cpu.get_flag(NEGATIVE_FLAG));
+    }
+
+    #[test]
+    fn test_ror_accumulator() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0x6A]); // ROR A
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+        cpu.register_a = 0b00000001;
+        cpu.set_flag(CARRY_FLAG, false);
+
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0b00000000);
+        assert!(cpu.get_flag(CARRY_FLAG));
+        assert!(cpu.get_flag(ZERO_FLAG));
+        assert!(!cpu.get_flag(NEGATIVE_FLAG));
+    }
+
+    #[test]
+    fn test_sec_clc() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0x38, 0x18]); // SEC, CLC
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+
+        cpu.run(); // SEC
+        assert!(cpu.get_flag(CARRY_FLAG));
+
+        cpu.run(); // CLC
+        assert!(!cpu.get_flag(CARRY_FLAG));
+    }
+
+    #[test]
+    fn test_sed_cld() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0xF8, 0xD8]); // SED, CLD
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+
+        cpu.run(); // SED
+        assert!(cpu.get_flag(DECIMAL_FLAG));
+
+        cpu.run(); // CLD
+        assert!(!cpu.get_flag(DECIMAL_FLAG));
+    }
+
+    #[test]
+    fn test_sei_cli() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0x78, 0x58]); // SEI, CLI
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+
+        cpu.run(); // SEI
+        assert!(cpu.get_flag(IRQ_FLAG));
+
+        cpu.run(); // CLI
+        assert!(!cpu.get_flag(IRQ_FLAG));
+    }
+
+    #[test]
+    fn test_transfer_tay() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0xA8]); // TAY
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+        cpu.register_a = 0x10;
+
+        cpu.run();
+
+        assert_eq!(cpu.register_y, 0x10);
+        assert!(!cpu.get_flag(ZERO_FLAG));
+        assert!(!cpu.get_flag(NEGATIVE_FLAG));
+    }
+
+    #[test]
+    fn test_stack_pha_pla() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0x48, 0xA9, 0x00, 0x68]); // PHA, LDA #$00, PLA
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+        cpu.register_a = 0x77;
+
+        cpu.run(); // PHA
+        cpu.run(); // LDA #$00
+        cpu.run(); // PLA
+
+        assert_eq!(cpu.register_a, 0x77);
+    }
+
+    #[test]
+    fn test_rti() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0x40]); // RTI
+
+        // Set up the stack to simulate an interrupt return
+        mock_bus.mem_write(0x01FF, 0x80); // PCH
+        mock_bus.mem_write(0x01FE, 0x20); // PCL
+        mock_bus.mem_write(0x01FD, 0x00); // Status
+        let mut cpu = CPU::new(mock_bus);
+
+        cpu.reset();
+        cpu.stack_pointer = 0xFC;
+
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, 0x8020);
+    }
+
+    #[test]
+    fn test_sbc_immediate() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0xE9, 0x01]); // SBC #$01
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+        cpu.register_a = 0x03;
+        cpu.set_flag(CARRY_FLAG, true);
+
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0x02);
+        assert!(!cpu.get_flag(ZERO_FLAG));
+        assert!(!cpu.get_flag(NEGATIVE_FLAG));
+        assert!(cpu.get_flag(CARRY_FLAG));
+    }
+
+    #[test]
+    fn test_sbc_with_borrow() {
+        let mut mock_bus = MockBus::new();
+        mock_bus.load(&[0xE9, 0x01]); // SBC #$01
+
+        let mut cpu = CPU::new(mock_bus);
+        cpu.reset();
+        cpu.register_a = 0x00;
+        cpu.set_flag(CARRY_FLAG, false); // Borrow
+
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0xFE);
+        assert!(!cpu.get_flag(ZERO_FLAG));
+        assert!(cpu.get_flag(NEGATIVE_FLAG));
+        assert!(!cpu.get_flag(CARRY_FLAG));
     }
 }

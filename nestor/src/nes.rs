@@ -20,7 +20,7 @@ pub enum PlayerJoypad {
 }
 
 pub struct NES {
-    pub cpu: CPU,
+    pub cpu: CPU<Bus>,
     pub rom: Option<ROM>,
     pub status: EmulationStatus,
 }

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 bitflags! {
     // https://wiki.nesdev.com/w/index.php/Controller_reading_code
     #[derive(Clone, Serialize, Deserialize)]
+    #[repr(transparent)]
     pub struct JoypadButton: u8 {
         const RIGHT             = 0b10000000;
         const LEFT              = 0b01000000;
@@ -16,7 +17,7 @@ bitflags! {
     }
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone)]
 pub struct Joypad {
     strobe: bool,
     button_index: u8,
