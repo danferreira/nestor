@@ -145,7 +145,6 @@ impl<B: Memory + CpuBus> CPU<B> {
     fn pop_stack(&mut self) -> u8 {
         self.stack_pointer = self.stack_pointer.wrapping_add(1);
 
-        println!("sp {:#X}", (self.stack_pointer as u16) + 0x0100);
         self.bus.mem_read((self.stack_pointer as u16) + 0x0100)
     }
 

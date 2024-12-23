@@ -1,5 +1,3 @@
-#[rustfmt::skip]
-
 pub static SYSTEM_PALETTE: [(u8, u8, u8); 64] = [
     (0x75, 0x75, 0x75),
     (0x27, 0x1B, 0x8F),
