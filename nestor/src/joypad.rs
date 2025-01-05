@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 bitflags! {
     // https://wiki.nesdev.com/w/index.php/Controller_reading_code
-    #[derive(Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     #[repr(transparent)]
     pub struct JoypadButton: u8 {
         const RIGHT             = 0b10000000;
