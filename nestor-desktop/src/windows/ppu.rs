@@ -56,7 +56,7 @@ impl PPUWindow {
 
 impl PPUWindow {
     pub fn title(&self) -> String {
-        "NEStor - PPU".into()
+        "PPU".into()
     }
 
     pub fn settings(&self) -> iced::window::Settings {

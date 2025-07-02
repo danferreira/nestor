@@ -55,7 +55,7 @@ impl Emulator {
             let nes = nes.clone();
 
             thread::spawn(move || {
-                let wait_time = Duration::from_millis(16);
+                let wait_time = Duration::from_micros(16667);
                 let mut start = Instant::now();
 
                 loop {
@@ -91,8 +91,8 @@ impl Emulator {
 }
 
 impl Emulator {
-    fn title(&self) -> String {
-        "NEStor - NES Emulator".into()
+    pub fn title(&self) -> String {
+        "Emulator".into()
     }
 
     pub fn update(&mut self, message: Message) -> Option<Action> {

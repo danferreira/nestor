@@ -52,8 +52,18 @@ impl App {
         (App { nes, windows }, task.map(|_id| Message::Dummy))
     }
 
-    fn title(&self, _window_id: window::Id) -> String {
-        "Emulator".into()
+    fn title(&self, window_id: window::Id) -> String {
+        if let Some(window) = self.windows.get(&window_id) {
+            let subtitle = match window {
+                Window::Emulator(window) => window.title(),
+                Window::PPU(window) => window.title(),
+                Window::Nametables(window) => window.title(),
+            };
+
+            return format!("NEStor - {}", subtitle);
+        }
+
+        "NEStor".into()
     }
 
     fn theme(&self, _window: window::Id) -> iced::Theme {
@@ -80,18 +90,11 @@ impl App {
                             }
                             emulator::Action::OpenPPUWindow => {
                                 let window = ppu::PPUWindow::new(self.nes.clone());
-                                let (id, task) = window::open(window.settings());
-
-                                self.windows.insert(id, Window::PPU(window));
-
-                                return task.map(|_id| Message::Dummy);
+                                return self.open_window(Window::PPU(window));
                             }
                             emulator::Action::OpenNametablesWindow => {
                                 let window = nametables::NametablesWindow::new(self.nes.clone());
-                                let (id, task) = window::open(window.settings());
-
-                                self.windows.insert(id, Window::Nametables(window));
-                                return task.map(|_id| Message::Dummy);
+                                return self.open_window(Window::Nametables(window));
                             }
                         }
                     }
@@ -166,5 +169,16 @@ impl App {
         } else {
             horizontal_space().into()
         }
+    }
+
+    fn open_window(&mut self, window: Window) -> Task<Message> {
+        let settings = match &window {
+            Window::Emulator(e) => e.settings(),
+            Window::PPU(p) => p.settings(),
+            Window::Nametables(n) => n.settings(),
+        };
+        let (id, task) = window::open(settings);
+        self.windows.insert(id, window);
+        task.map(|_id| Message::Dummy)
     }
 }

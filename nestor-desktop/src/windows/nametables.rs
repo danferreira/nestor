@@ -53,7 +53,7 @@ impl NametablesWindow {
 
 impl NametablesWindow {
     pub fn title(&self) -> String {
-        "NEStor - Nametables".into()
+        "Nametables".into()
     }
 
     pub fn settings(&self) -> iced::window::Settings {
