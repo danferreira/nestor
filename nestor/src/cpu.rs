@@ -26,6 +26,7 @@ pub struct CPU<B: Memory + CpuBus> {
     pub program_counter: u16,
     pub bus: B,
     pub cycles: u64,
+    pub halted: bool,
 }
 
 #[derive(Debug)]
@@ -61,6 +62,7 @@ impl<B: Memory + CpuBus> CPU<B> {
             program_counter: 0,
             cycles: 0,
             bus,
+            halted: false,
         }
     }
 
@@ -972,6 +974,7 @@ impl<B: Memory + CpuBus> CPU<B> {
         self.register_y = 0;
         self.processor_status = 0x24;
         self.stack_pointer = STACK_RESET;
+        self.halted = false;
         // self.cycles = 7;
         // self.bus.tick(7);
 
@@ -979,6 +982,10 @@ impl<B: Memory + CpuBus> CPU<B> {
     }
 
     pub fn run(&mut self) -> u8 {
+        if self.halted {
+            return 1;
+        }
+
         if self.bus.poll_nmi_status().is_some() {
             self.interrupt_nmi();
         }
@@ -1066,7 +1073,8 @@ impl<B: Memory + CpuBus> CPU<B> {
             Mnemonic::SHY => self.shy(&opcode.mode),
             Mnemonic::SRE => self.sre(&opcode.mode),
             Mnemonic::RRA => self.rra(&opcode.mode),
-            _ => todo!("{:?}", opcode.mnemonic),
+            Mnemonic::JAM => self.halted = true,
+            Mnemonic::AHX | Mnemonic::TAS | Mnemonic::XAA => {} // _ => todo!("{:?}", opcode.mnemonic),
         }
 
         if program_counter_state == self.program_counter {
