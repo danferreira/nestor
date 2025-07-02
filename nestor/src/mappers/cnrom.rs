@@ -29,11 +29,11 @@ impl Mapper for CNROM {
 
             // PRG-ROM
             0x8000..=0xffff => {
+                let mut bank = address as usize - 0x8000;
                 if self.prg_rom.len() == 16384 {
-                    self.prg_rom[address as usize - 0x8000 - 16384]
-                } else {
-                    self.prg_rom[address as usize - 0x8000]
+                    bank %= 16384;
                 }
+                self.prg_rom[bank]
             }
 
             _ => 0,

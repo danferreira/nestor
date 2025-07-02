@@ -18,6 +18,9 @@ impl Mapper for NROM {
     fn read(&self, address: u16) -> u8 {
         match address {
             0x0000..=0x1FFF => {
+                if self.chr_rom.is_empty() {
+                    return 0;
+                }
                 // CHR-ROM: This should be fine if you're just mirroring the address.
                 let len = self.chr_rom.len();
                 self.chr_rom[address as usize % len]
