@@ -747,18 +747,48 @@ impl PPU {
         }
     }
 
-    pub fn poll_nmi_interrupt(&mut self) -> Option<u8> {
-        self.nmi_interrupt.take()
+    fn handle_vblank_scanline(&mut self) {
+        if self.scanline == 241 && self.cycle == 1 && !self.suppress_vbl {
+            self.status.set_vblank_status(true);
+            if self.ctrl.generate_vblank_nmi() {
+                self.nmi_interrupt = Some(1);
+            }
+        }
     }
 
-    pub fn tick(&mut self) -> bool {
-        let scanline_step = Scanline::from(self.scanline);
+    fn handle_visible_scanline(&mut self) {
+        match self.cycle {
+            1..=256 => {
+                self.update_shift_registers();
+                self.fetch_internal_registers();
 
-        match (scanline_step, self.cycle) {
-            (_, 0) => {
-                //  idle cycle
+                if self.cycle == 256 {
+                    self.increment_y();
+                }
+
+                self.render_pixel();
             }
-            (Scanline::PreRender, 1..=256) => {
+            257 => {
+                self.transfer_x();
+                self.update_shift_registers();
+                self.sprite_evaluation();
+            }
+            321..=336 => {
+                self.update_shift_registers();
+                self.fetch_internal_registers()
+            }
+            337 | 339 => {
+                // Unused NT fetches
+                self.fetch_nametable_byte();
+            }
+            340 => self.load_sprites(),
+            _ => (),
+        }
+    }
+
+    fn handle_pre_render_scanline(&mut self) {
+        match self.cycle {
+            1..=256 => {
                 if self.cycle == 1 {
                     self.status.reset_vblank_status();
                     self.status.set_sprite_zero_hit(false);
@@ -776,16 +806,16 @@ impl PPU {
                     self.increment_y();
                 }
             }
-            (Scanline::PreRender, 257) => self.transfer_x(),
-            (Scanline::PreRender, 280..=304) => self.transfer_y(),
-            (Scanline::PreRender, 321..=336) => {
+            257 => self.transfer_x(),
+            280..=304 => self.transfer_y(),
+            321..=336 => {
                 self.update_shift_registers();
                 self.fetch_internal_registers()
             }
-            (Scanline::PreRender, 337) => {
+            337 => {
                 self.fetch_nametable_byte();
             }
-            (Scanline::PreRender, 339) => {
+            339 => {
                 self.fetch_nametable_byte();
 
                 // The "Skipped on BG+odd" tick is implemented by jumping directly
@@ -795,42 +825,20 @@ impl PPU {
                     self.cycle = 340;
                 }
             }
-            (Scanline::Visible, 1..=256) => {
-                self.update_shift_registers();
-                self.fetch_internal_registers();
-
-                if self.cycle == 256 {
-                    self.increment_y();
-                }
-
-                self.render_pixel();
-            }
-            (Scanline::Visible, 257) => {
-                self.transfer_x();
-                self.update_shift_registers();
-                self.sprite_evaluation();
-            }
-            (Scanline::Visible, 321..=336) => {
-                self.update_shift_registers();
-                self.fetch_internal_registers()
-            }
-            (Scanline::Visible, 337 | 339) => {
-                // Unused NT fetches
-                self.fetch_nametable_byte();
-            }
-            (Scanline::Visible, 340) => self.load_sprites(),
-            (Scanline::PostRender, _) => {
-                //Idle. Do nothing
-            }
-            (Scanline::VBlank, 1) => {
-                if self.scanline == 241 && !self.suppress_vbl {
-                    self.status.set_vblank_status(true);
-                    if self.ctrl.generate_vblank_nmi() {
-                        self.nmi_interrupt = Some(1);
-                    }
-                }
-            }
             _ => (),
+        }
+    }
+
+    pub fn poll_nmi_interrupt(&mut self) -> Option<u8> {
+        self.nmi_interrupt.take()
+    }
+
+    pub fn tick(&mut self) -> bool {
+        match Scanline::from(self.scanline) {
+            Scanline::PreRender => self.handle_pre_render_scanline(),
+            Scanline::Visible => self.handle_visible_scanline(),
+            Scanline::PostRender => { /* Idle. Do nothing */ }
+            Scanline::VBlank => self.handle_vblank_scanline(),
         }
 
         self.cycle += 1;
