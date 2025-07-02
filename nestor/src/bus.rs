@@ -70,6 +70,15 @@ impl Bus {
             None
         }
     }
+
+    fn dma_transfer(&mut self, data: u8) {
+        let hi: u16 = (data as u16) << 8;
+        for i in 0..256u16 {
+            let value = self.mem_read(hi + i);
+            self.ppu.oam_data[self.ppu.oam_addr as usize] = value;
+            self.ppu.oam_addr = self.ppu.oam_addr.wrapping_add(1);
+        }
+    }
 }
 
 impl Memory for Bus {
@@ -117,14 +126,7 @@ impl Memory for Bus {
             0x4017 => {
                 //ignore for now
             }
-            0x4014 => {
-                let hi: u16 = (data as u16) << 8;
-                for i in 0..256u16 {
-                    let value = self.mem_read(hi + i);
-                    self.ppu.oam_data[self.ppu.oam_addr as usize] = value;
-                    self.ppu.oam_addr = self.ppu.oam_addr.wrapping_add(1);
-                }
-            }
+            0x4014 => self.dma_transfer(data),
             // SRAM
             0x6000..=0x7fff => {
                 self.mapper
