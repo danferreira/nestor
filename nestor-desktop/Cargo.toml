@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 fps_counter = "3.0.0"
-iced = { version = "0.13.1", features = ["image", "multi-window"] }
-iced_aw = { version = "0.11.0", default-features = false, features = ["menu"] }
+iced = { version = "0.13", features = ["image", "multi-window"] }
+iced_aw = { version = "0.12.2", default-features = false, features = ["menu"] }
 rfd = "0.15.2"
 nestor = { version = "0.1.0", path = "../nestor" }
